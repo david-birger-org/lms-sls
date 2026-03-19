@@ -1,9 +1,9 @@
-import { requireInternalApiKey } from "../../src/lib/auth";
+import { requireAuthenticatedAdmin } from "../../src/lib/auth";
 import { fetchStatement, getRangeDays } from "../../src/lib/monobank";
 import { json } from "../../src/lib/response";
 
 export async function GET(request: Request) {
-  const unauthorizedResponse = requireInternalApiKey(request);
+  const unauthorizedResponse = await requireAuthenticatedAdmin(request);
 
   if (unauthorizedResponse) {
     return unauthorizedResponse;

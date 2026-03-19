@@ -1,9 +1,10 @@
-import { requireInternalApiKey } from "../../../src/lib/auth";
+import { requireAuthenticatedAdmin } from "../../../src/lib/auth";
 import { fetchInvoiceStatus } from "../../../src/lib/monobank";
+import { syncMonobankPaymentStatus } from "../../../src/lib/persistence";
 import { json } from "../../../src/lib/response";
 
 export async function GET(request: Request) {
-  const unauthorizedResponse = requireInternalApiKey(request);
+  const unauthorizedResponse = await requireAuthenticatedAdmin(request);
 
   if (unauthorizedResponse) {
     return unauthorizedResponse;
@@ -18,6 +19,8 @@ export async function GET(request: Request) {
     }
 
     const invoiceStatus = await fetchInvoiceStatus(invoiceId);
+    await syncMonobankPaymentStatus(invoiceStatus);
+
     return json(invoiceStatus);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected error";
