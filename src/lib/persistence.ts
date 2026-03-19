@@ -3,6 +3,7 @@ import {
   type ClerkUser,
   cleanNullableText,
   getClerkPrimaryEmail,
+  getClerkUserRole,
   syncClerkUserMetadata,
   toDateFromClerkTimestamp,
 } from "./clerk";
@@ -11,6 +12,7 @@ import type {
   MonobankInvoiceStatusResponse,
   SupportedCurrency,
 } from "./monobank";
+import { normalizeMonobankStatus, type PaymentStatus } from "./payments";
 
 interface AppUserRow {
   clerk_user_id: string;
@@ -20,7 +22,10 @@ interface AppUserRow {
 
 interface PaymentDraftRow {
   id: string;
+  invoice_id: string | null;
+  page_url: string | null;
   reference: string;
+  status: PaymentStatus;
   user_id: string;
 }
 
@@ -31,6 +36,17 @@ export interface CreatePaymentDraftInput {
   customerEmail?: string | null;
   customerName: string;
   description: string;
+  idempotencyKey?: string | null;
+}
+
+export interface PaymentCreationState {
+  invoiceId: string | null;
+  pageUrl: string | null;
+  paymentId: string;
+  reference: string;
+  reused: boolean;
+  status: PaymentStatus;
+  userId: string;
 }
 
 function toJsonbValue(value: unknown) {
@@ -106,7 +122,7 @@ export async function upsertClerkUser(user: ClerkUser) {
 
   await syncClerkUserMetadata({
     appUserId: appUser.id,
-    role: "user",
+    role: getClerkUserRole(user) ?? "user",
     user,
   });
 
@@ -138,12 +154,15 @@ export async function markClerkUserDeleted(
   `;
 }
 
-export async function createPaymentDraft(input: CreatePaymentDraftInput) {
+export async function createPaymentDraft(
+  input: CreatePaymentDraftInput,
+): Promise<PaymentCreationState> {
   const database = getDatabase();
   const paymentId = crypto.randomUUID();
   const reference = `mb-${paymentId}`;
   const customerEmail = cleanNullableText(input.customerEmail);
   const customerName = cleanNullableText(input.customerName);
+  const idempotencyKey = cleanNullableText(input.idempotencyKey);
 
   if (!customerName) {
     throw new Error("Customer name is required to create a payment record.");
@@ -175,10 +194,41 @@ export async function createPaymentDraft(input: CreatePaymentDraftInput) {
       `Failed to create or load app user ${input.clerkUserId}.`,
     );
 
+    if (idempotencyKey) {
+      const existingPayments = await sql<PaymentDraftRow[]>`
+        select
+          id,
+          invoice_id,
+          page_url,
+          reference,
+          status,
+          user_id
+        from payments
+        where idempotency_key = ${idempotencyKey}
+        limit 1
+        for update
+      `;
+
+      const existingPayment = existingPayments[0];
+
+      if (existingPayment) {
+        return {
+          invoiceId: existingPayment.invoice_id,
+          pageUrl: existingPayment.page_url,
+          paymentId: existingPayment.id,
+          reference: existingPayment.reference,
+          reused: true,
+          status: existingPayment.status,
+          userId: existingPayment.user_id,
+        };
+      }
+    }
+
     const paymentRows = await sql<PaymentDraftRow[]>`
       insert into payments (
         id,
         user_id,
+        idempotency_key,
         provider,
         reference,
         status,
@@ -191,29 +241,66 @@ export async function createPaymentDraft(input: CreatePaymentDraftInput) {
       values (
         ${paymentId},
         ${appUser.id},
+        ${idempotencyKey},
         ${"monobank"},
         ${reference},
-        ${"pending_creation"},
+        ${"draft"},
         ${input.amountMinor},
         ${input.currency},
         ${customerName},
         ${customerEmail},
         ${input.description}
       )
-      returning id, reference, user_id
+      returning id, invoice_id, page_url, reference, status, user_id
     `;
 
-    return getRequiredRow(
+    const payment = getRequiredRow(
       paymentRows,
       `Failed to create payment draft ${paymentId}.`,
     );
+
+    return {
+      invoiceId: payment.invoice_id,
+      pageUrl: payment.page_url,
+      paymentId: payment.id,
+      reference: payment.reference,
+      reused: false,
+      status: payment.status,
+      userId: payment.user_id,
+    };
   });
 
+  return payment;
+}
+
+export async function reservePaymentForInvoiceCreation(paymentId: string) {
+  const database = getDatabase();
+
+  const paymentRows = await database<PaymentDraftRow[]>`
+    update payments
+    set
+      status = ${"creating_invoice"},
+      updated_at = timezone('utc', now())
+    where id = ${paymentId}
+      and status in (${"draft"}, ${"creation_failed"})
+    returning id, invoice_id, page_url, reference, status, user_id
+  `;
+
+  const payment = paymentRows[0];
+
+  if (!payment) {
+    return null;
+  }
+
   return {
+    invoiceId: payment.invoice_id,
+    pageUrl: payment.page_url,
     paymentId: payment.id,
     reference: payment.reference,
+    reused: true,
+    status: payment.status,
     userId: payment.user_id,
-  };
+  } satisfies PaymentCreationState;
 }
 
 export async function completePaymentCreation({
@@ -234,7 +321,7 @@ export async function completePaymentCreation({
     set
       invoice_id = ${cleanNullableText(invoiceId)},
       page_url = ${cleanNullableText(pageUrl)},
-      status = ${"created"},
+      status = ${"invoice_created"},
       failure_reason = null,
       provider_payload = ${toJsonbValue(providerPayload)}::jsonb,
       updated_at = timezone('utc', now())
@@ -276,12 +363,15 @@ export async function syncMonobankPaymentStatus(
   const database = getDatabase();
   const reference = cleanNullableText(invoiceStatus.reference);
   const hasReference = reference !== null;
+  const providerStatus = cleanNullableText(invoiceStatus.status);
+  const normalizedStatus = normalizeMonobankStatus(providerStatus);
 
   await database`
     update payments
     set
       invoice_id = coalesce(payments.invoice_id, ${invoiceId}),
-      status = coalesce(${cleanNullableText(invoiceStatus.status)}, payments.status),
+      provider_status = coalesce(${providerStatus}, payments.provider_status),
+      status = coalesce(${normalizedStatus}, payments.status),
       failure_reason = coalesce(
         ${cleanNullableText(invoiceStatus.failureReason)},
         ${cleanNullableText(invoiceStatus.errCode)},

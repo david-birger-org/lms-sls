@@ -1,4 +1,5 @@
 import { requireAuthenticatedAdmin } from "../../../src/lib/auth";
+import { getErrorMessage } from "../../../src/lib/errors";
 import { fetchInvoiceStatus } from "../../../src/lib/monobank";
 import { syncMonobankPaymentStatus } from "../../../src/lib/persistence";
 import { json } from "../../../src/lib/response";
@@ -23,10 +24,8 @@ export async function GET(request: Request) {
 
     return json(invoiceStatus);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unexpected error";
-
     return json(
-      { error: `Failed to load payment details: ${message}` },
+      { error: `Failed to load payment details: ${getErrorMessage(error)}` },
       { status: 500 },
     );
   }

@@ -1,3 +1,5 @@
+import { env } from "./env";
+
 export interface MonobankStatementItem {
   invoiceId?: string;
   status?: string;
@@ -55,6 +57,11 @@ export interface MonobankInvoiceStatusResponse {
   cancelList?: MonobankCancelItem[];
 }
 
+export interface MonobankInvoiceResponse {
+  invoiceId?: string;
+  pageUrl?: string;
+}
+
 export type SupportedCurrency = "UAH" | "USD";
 
 const CURRENCY_CODE: Record<SupportedCurrency, number> = {
@@ -64,14 +71,49 @@ const CURRENCY_CODE: Record<SupportedCurrency, number> = {
 
 const MAX_RANGE_SECONDS = 31 * 24 * 60 * 60;
 
-export function getMonobankToken() {
-  const token = process.env.MONOBANK_TOKEN?.trim();
+function getMonobankBaseUrl() {
+  return "https://api.monobank.ua/api/merchant/";
+}
 
-  if (!token) {
-    throw new Error("MONOBANK_TOKEN is missing in environment variables.");
+function getMonobankHeaders(token: string, includeJsonContentType = false) {
+  return {
+    ...(includeJsonContentType ? { "Content-Type": "application/json" } : {}),
+    "X-Token": token,
+  };
+}
+
+async function requestMonobank<T>({
+  body,
+  method,
+  path,
+  searchParams,
+  token = env.monobankToken,
+}: {
+  body?: unknown;
+  method: "GET" | "POST";
+  path: string;
+  searchParams?: Record<string, number | string>;
+  token?: string;
+}) {
+  const url = new URL(path, getMonobankBaseUrl());
+
+  for (const [key, value] of Object.entries(searchParams ?? {})) {
+    url.searchParams.set(key, String(value));
   }
 
-  return token;
+  const monobankResponse = await fetch(url, {
+    method,
+    headers: getMonobankHeaders(token, body !== undefined),
+    body: body === undefined ? undefined : JSON.stringify(body),
+    cache: "no-store",
+  });
+
+  if (!monobankResponse.ok) {
+    const errorText = await monobankResponse.text();
+    throw new Error(`Monobank API error: ${errorText}`);
+  }
+
+  return (await monobankResponse.json()) as T;
 }
 
 export function toMinorUnits(amount: number) {
@@ -103,31 +145,18 @@ export async function fetchStatementChunk({
   from: number;
   to: number;
 }) {
-  const statementUrl = new URL(
-    "https://api.monobank.ua/api/merchant/statement",
-  );
-  statementUrl.searchParams.set("from", String(from));
-  statementUrl.searchParams.set("to", String(to));
-
-  const monobankResponse = await fetch(statementUrl, {
+  const response = await requestMonobank<MonobankStatementResponse>({
     method: "GET",
-    headers: {
-      "X-Token": token,
-    },
-    cache: "no-store",
+    path: "statement",
+    searchParams: { from, to },
+    token,
   });
 
-  if (!monobankResponse.ok) {
-    const errorText = await monobankResponse.text();
-    throw new Error(`Monobank API error: ${errorText}`);
-  }
-
-  const response = (await monobankResponse.json()) as MonobankStatementResponse;
   return response.list ?? [];
 }
 
 export async function fetchStatement(days: number) {
-  const token = getMonobankToken();
+  const token = env.monobankToken;
   const to = getUnixTimestamp(new Date());
   const from = to - days * 24 * 60 * 60;
   const items: MonobankStatementItem[] = [];
@@ -149,25 +178,38 @@ export async function fetchStatement(days: number) {
   return items;
 }
 
-export async function fetchInvoiceStatus(invoiceId: string) {
-  const token = getMonobankToken();
-  const statusUrl = new URL(
-    "https://api.monobank.ua/api/merchant/invoice/status",
-  );
-  statusUrl.searchParams.set("invoiceId", invoiceId);
-
-  const monobankResponse = await fetch(statusUrl, {
-    method: "GET",
-    headers: {
-      "X-Token": token,
+export async function createInvoice({
+  amountMinor,
+  currency,
+  customerName,
+  description,
+  reference,
+}: {
+  amountMinor: number;
+  currency: SupportedCurrency;
+  customerName: string;
+  description: string;
+  reference: string;
+}) {
+  return requestMonobank<MonobankInvoiceResponse>({
+    method: "POST",
+    path: "invoice/create",
+    body: {
+      amount: amountMinor,
+      ccy: getCurrencyCode(currency),
+      merchantPaymInfo: {
+        reference,
+        destination: description,
+        comment: `${customerName}: ${description}`,
+      },
     },
-    cache: "no-store",
   });
+}
 
-  if (!monobankResponse.ok) {
-    const errorText = await monobankResponse.text();
-    throw new Error(`Monobank API error: ${errorText}`);
-  }
-
-  return (await monobankResponse.json()) as MonobankInvoiceStatusResponse;
+export async function fetchInvoiceStatus(invoiceId: string) {
+  return requestMonobank<MonobankInvoiceStatusResponse>({
+    method: "GET",
+    path: "invoice/status",
+    searchParams: { invoiceId },
+  });
 }

@@ -1,5 +1,22 @@
 create extension if not exists pgcrypto;
 
+do $$
+begin
+  create type public.payment_status as enum (
+    'draft',
+    'creating_invoice',
+    'creation_failed',
+    'invoice_created',
+    'processing',
+    'paid',
+    'failed',
+    'expired',
+    'reversed'
+  );
+exception
+  when duplicate_object then null;
+end $$;
+
 create table if not exists public.app_users (
   id uuid primary key default gen_random_uuid(),
   clerk_user_id text not null unique,
@@ -25,10 +42,12 @@ alter table public.app_users
 create table if not exists public.payments (
   id uuid primary key,
   user_id uuid not null references public.app_users(id) on delete restrict,
+  idempotency_key text,
   provider text not null default 'monobank',
   reference text not null unique,
   invoice_id text unique,
-  status text not null,
+  provider_status text,
+  status public.payment_status not null,
   amount_minor bigint not null,
   final_amount_minor bigint,
   currency text not null,
@@ -55,3 +74,7 @@ create index if not exists idx_payments_invoice_id
 
 create index if not exists idx_payments_reference
   on public.payments (reference);
+
+create unique index if not exists idx_payments_idempotency_key
+  on public.payments (idempotency_key)
+  where idempotency_key is not null;

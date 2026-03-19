@@ -38,14 +38,17 @@ The API surface lives under `api/monobank/*`:
 - `GET /api/monobank/statement`
 - `POST /api/clerk/webhook`
 
-`POST /api/monobank/invoice` now expects a `clerkUserId` in the body and stores the payment in Supabase before creating the Monobank invoice. The Clerk webhook keeps `public.app_users` in sync, `public.payments.user_id` points to that local user row, and Clerk `privateMetadata` stores the local database user id plus the app role.
+`POST /api/monobank/invoice` expects a `clerkUserId` in the body and stores the payment in Supabase before creating the Monobank invoice. Send an `Idempotency-Key` header to make retries safe; repeated requests with the same key reuse the existing payment row and invoice state. The Clerk webhook keeps `public.app_users` in sync, `public.payments.user_id` points to that local user row, and Clerk `privateMetadata` stores the local database user id plus the app role.
 
 All `api/monobank/*` endpoints now require a valid Clerk session token and an `admin` role in Clerk `privateMetadata.role`.
 
-Run the SQL in `supabase/schema.sql` in Supabase before calling the endpoints.
+Run `supabase/schema.sql` for a fresh setup, or apply the SQL files in `supabase/migrations/` to update an existing database.
+
+Payment rows now use a normalized internal status enum and store the raw provider status separately.
 
 ## Validate
 
 ```bash
 bun run typecheck
+bun test
 ```

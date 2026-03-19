@@ -3,11 +3,24 @@ import {
   type ClerkUser,
   verifyClerkWebhook,
 } from "../../src/lib/clerk";
+import { getErrorMessage } from "../../src/lib/errors";
 import {
   markClerkUserDeleted,
   upsertClerkUser,
 } from "../../src/lib/persistence";
 import { json } from "../../src/lib/response";
+
+function getWebhookUserId(event: { data: unknown; type: string }) {
+  switch (event.type) {
+    case "user.created":
+    case "user.updated":
+      return (event.data as ClerkUser | null | undefined)?.id ?? null;
+    case "user.deleted":
+      return (event.data as ClerkDeletedUser | null | undefined)?.id ?? null;
+    default:
+      return null;
+  }
+}
 
 export async function POST(request: Request) {
   let event:
@@ -20,7 +33,7 @@ export async function POST(request: Request) {
   try {
     ({ event } = await verifyClerkWebhook(request));
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unexpected error";
+    const message = getErrorMessage(error);
     const status = message.includes("CLERK_WEBHOOK") ? 500 : 400;
 
     return json(
@@ -66,15 +79,10 @@ export async function POST(request: Request) {
         return json({ ignored: true, received: true, type: event.type });
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unexpected error";
+    const message = getErrorMessage(error);
     console.error("Failed to persist Clerk webhook", {
       clerkEventType: event.type,
-      clerkUserId:
-        event.type === "user.created" || event.type === "user.updated"
-          ? (event.data as ClerkUser | null | undefined)?.id ?? null
-          : event.type === "user.deleted"
-            ? (event.data as ClerkDeletedUser | null | undefined)?.id ?? null
-            : null,
+      clerkUserId: getWebhookUserId(event),
       error,
       payload: event.data,
     });

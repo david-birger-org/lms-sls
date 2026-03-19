@@ -1,4 +1,5 @@
 import { requireAuthenticatedAdmin } from "../../src/lib/auth";
+import { getErrorMessage } from "../../src/lib/errors";
 import { fetchStatement, getRangeDays } from "../../src/lib/monobank";
 import { json } from "../../src/lib/response";
 
@@ -16,10 +17,8 @@ export async function GET(request: Request) {
 
     return json({ list: items });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unexpected error";
-
     return json(
-      { error: `Failed to load statement: ${message}` },
+      { error: `Failed to load statement: ${getErrorMessage(error)}` },
       { status: 500 },
     );
   }

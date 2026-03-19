@@ -1,4 +1,5 @@
 import { Webhook } from "svix";
+import { env } from "./env";
 
 export type AppUserRole = "admin" | "user";
 
@@ -39,32 +40,14 @@ export interface ClerkWebhookEvent<TData = unknown> {
   type: string;
 }
 
-function getClerkWebhookSecret() {
-  const webhookSecret =
-    process.env.CLERK_WEBHOOK_SECRET?.trim() ||
-    process.env.CLERK_WEBHOOK_SIGNING_SECRET?.trim();
-
-  if (!webhookSecret) {
-    throw new Error(
-      "CLERK_WEBHOOK_SECRET or CLERK_WEBHOOK_SIGNING_SECRET is missing in environment variables.",
-    );
-  }
-
-  return webhookSecret;
-}
-
-function getClerkSecretKey() {
-  const secretKey = process.env.CLERK_SECRET_KEY?.trim();
-
-  if (!secretKey) {
-    throw new Error("CLERK_SECRET_KEY is missing in environment variables.");
-  }
-
-  return secretKey;
-}
-
 function getClerkBackendApiBaseUrl() {
   return "https://api.clerk.com/v1";
+}
+
+function getClerkPrivateMetadata(user: ClerkUser) {
+  return user.private_metadata && typeof user.private_metadata === "object"
+    ? { ...user.private_metadata }
+    : {};
 }
 
 function getRequiredSvixHeader(request: Request, headerName: string) {
@@ -79,7 +62,7 @@ function getRequiredSvixHeader(request: Request, headerName: string) {
 
 export async function verifyClerkWebhook(request: Request) {
   const payload = await request.text();
-  const webhook = new Webhook(getClerkWebhookSecret());
+  const webhook = new Webhook(env.clerkWebhookSecret);
 
   const event = webhook.verify(payload, {
     "svix-id": getRequiredSvixHeader(request, "svix-id"),
@@ -195,11 +178,12 @@ export async function syncClerkUserMetadata({
     {
       method: "PATCH",
       headers: {
-        Authorization: `Bearer ${getClerkSecretKey()}`,
+        Authorization: `Bearer ${env.clerkSecretKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         private_metadata: {
+          ...getClerkPrivateMetadata(user),
           role: desiredRole,
           userId: appUserId,
         },
