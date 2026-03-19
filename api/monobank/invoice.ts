@@ -18,6 +18,7 @@ import { json } from "../../src/lib/response";
 type OutputMode = "link" | "qr";
 
 interface CreateInvoiceRequestBody {
+  appUserId?: unknown;
   amount?: unknown;
   clerkUserId?: unknown;
   currency?: unknown;
@@ -29,6 +30,7 @@ interface CreateInvoiceRequestBody {
 }
 
 interface CreateInvoiceInput {
+  appUserId?: string;
   amountMinor: number;
   clerkUserId: string;
   currency: SupportedCurrency;
@@ -53,6 +55,7 @@ function parseCreateInvoiceInput(body: unknown): CreateInvoiceInput | Response {
   }
 
   const {
+    appUserId,
     amount,
     clerkUserId,
     currency,
@@ -63,6 +66,7 @@ function parseCreateInvoiceInput(body: unknown): CreateInvoiceInput | Response {
     output,
   } = body as CreateInvoiceRequestBody;
   const normalizedAmount = typeof amount === "number" ? amount : Number(amount);
+  const normalizedAppUserId = getTrimmedString(appUserId) ?? undefined;
   const normalizedClerkUserId = getTrimmedString(clerkUserId);
   const normalizedCustomerEmail = getTrimmedString(customerEmail) ?? undefined;
   const normalizedCustomerName = getTrimmedString(customerName);
@@ -95,6 +99,7 @@ function parseCreateInvoiceInput(body: unknown): CreateInvoiceInput | Response {
   }
 
   return {
+    appUserId: normalizedAppUserId,
     amountMinor: toMinorUnits(normalizedAmount),
     clerkUserId: normalizedClerkUserId,
     currency,
@@ -180,6 +185,7 @@ export function createPostHandler({
       };
 
       const paymentDraft = await createPaymentDraftFn({
+        appUserId: input.appUserId,
         amountMinor: input.amountMinor,
         clerkUserId: input.clerkUserId,
         currency: input.currency,
