@@ -1,10 +1,9 @@
-import { createClerkClient } from "@clerk/backend";
 import type { AppUserRole } from "./clerk";
 import { env } from "./env";
 import { getErrorMessage } from "./errors";
 import { json } from "./response";
 
-let clerkClient: ReturnType<typeof createClerkClient> | null = null;
+let clerkClient: ClerkAuthClient | null = null;
 
 interface ClerkAuthClient {
   authenticateRequest(
@@ -28,12 +27,14 @@ interface ClerkAuthClient {
   };
 }
 
-function getClerkClient() {
+async function getClerkClient() {
   if (!clerkClient) {
+    const { createClerkClient } = await import("@clerk/backend");
+
     clerkClient = createClerkClient({
       publishableKey: env.clerkPublishableKey,
       secretKey: env.clerkSecretKey,
-    });
+    }) as unknown as ClerkAuthClient;
   }
 
   return clerkClient;
@@ -44,12 +45,12 @@ function getRole(value: unknown): AppUserRole | null {
 }
 
 export function createRequireAuthenticatedAdmin(
-  clerkClientFactory: () => ClerkAuthClient = () =>
-    getClerkClient() as unknown as ClerkAuthClient,
+  clerkClientFactory: () => ClerkAuthClient | Promise<ClerkAuthClient> = () =>
+    getClerkClient(),
 ) {
   return async function requireAuthenticatedAdmin(request: Request) {
     try {
-      const clerkClient = clerkClientFactory();
+      const clerkClient = await clerkClientFactory();
 
       const requestState = await clerkClient.authenticateRequest(request, {
         acceptsToken: "session_token",
