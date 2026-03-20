@@ -4,7 +4,6 @@ import { createPostHandler } from "./invoice";
 
 const baseRequestBody = {
   amount: 125,
-  clerkUserId: "user_123",
   currency: "USD",
   customerEmail: "person@example.com",
   customerName: "Ada Lovelace",
@@ -68,7 +67,15 @@ describe("POST /api/monobank/invoice", () => {
         }),
       }),
       markPaymentCreationFailedFn: async () => undefined,
-      requireAuthenticatedAdminFn: async () => null,
+      requireAuthenticatedAdminFn: async () => ({
+        admin: {
+          email: "person@example.com",
+          name: "Ada Lovelace",
+          role: "admin",
+          userId: "user_123",
+        },
+        ok: true,
+      }),
       reservePaymentForInvoiceCreationFn: async () => null,
     });
 
@@ -101,7 +108,15 @@ describe("POST /api/monobank/invoice", () => {
       createInvoiceFn,
       createPaymentDraftFn,
       markPaymentCreationFailedFn: async () => undefined,
-      requireAuthenticatedAdminFn: async () => null,
+      requireAuthenticatedAdminFn: async () => ({
+        admin: {
+          email: "person@example.com",
+          name: "Ada Lovelace",
+          role: "admin",
+          userId: "user_123",
+        },
+        ok: true,
+      }),
       reservePaymentForInvoiceCreationFn,
     });
 
@@ -149,7 +164,15 @@ describe("POST /api/monobank/invoice", () => {
         }),
       }),
       markPaymentCreationFailedFn: async () => undefined,
-      requireAuthenticatedAdminFn: async () => null,
+      requireAuthenticatedAdminFn: async () => ({
+        admin: {
+          email: "person@example.com",
+          name: "Ada Lovelace",
+          role: "admin",
+          userId: "user_123",
+        },
+        ok: true,
+      }),
       reservePaymentForInvoiceCreationFn: async () => null,
     });
 

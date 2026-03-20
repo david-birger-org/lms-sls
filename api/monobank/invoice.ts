@@ -20,7 +20,6 @@ type OutputMode = "link" | "qr";
 interface CreateInvoiceRequestBody {
   appUserId?: unknown;
   amount?: unknown;
-  clerkUserId?: unknown;
   currency?: unknown;
   customerEmail?: unknown;
   customerName?: unknown;
@@ -29,10 +28,9 @@ interface CreateInvoiceRequestBody {
   output?: unknown;
 }
 
-interface CreateInvoiceInput {
+interface ParsedCreateInvoiceInput {
   appUserId?: string;
   amountMinor: number;
-  clerkUserId: string;
   currency: SupportedCurrency;
   customerEmail?: string;
   customerName: string;
@@ -49,7 +47,9 @@ function getTrimmedString(value: unknown) {
   return typeof value === "string" ? value.trim() || null : null;
 }
 
-function parseCreateInvoiceInput(body: unknown): CreateInvoiceInput | Response {
+function parseCreateInvoiceInput(
+  body: unknown,
+): ParsedCreateInvoiceInput | Response {
   if (!body || typeof body !== "object") {
     return badRequest("Request body must be a JSON object.");
   }
@@ -57,7 +57,6 @@ function parseCreateInvoiceInput(body: unknown): CreateInvoiceInput | Response {
   const {
     appUserId,
     amount,
-    clerkUserId,
     currency,
     customerEmail,
     customerName,
@@ -67,7 +66,6 @@ function parseCreateInvoiceInput(body: unknown): CreateInvoiceInput | Response {
   } = body as CreateInvoiceRequestBody;
   const normalizedAmount = typeof amount === "number" ? amount : Number(amount);
   const normalizedAppUserId = getTrimmedString(appUserId) ?? undefined;
-  const normalizedClerkUserId = getTrimmedString(clerkUserId);
   const normalizedCustomerEmail = getTrimmedString(customerEmail) ?? undefined;
   const normalizedCustomerName = getTrimmedString(customerName);
   const normalizedDescription = getTrimmedString(description);
@@ -80,10 +78,6 @@ function parseCreateInvoiceInput(body: unknown): CreateInvoiceInput | Response {
 
   if (currency !== "UAH" && currency !== "USD") {
     return badRequest("Currency must be UAH or USD.");
-  }
-
-  if (!normalizedClerkUserId) {
-    return badRequest("clerkUserId is required.");
   }
 
   if (!normalizedCustomerName) {
@@ -101,7 +95,6 @@ function parseCreateInvoiceInput(body: unknown): CreateInvoiceInput | Response {
   return {
     appUserId: normalizedAppUserId,
     amountMinor: toMinorUnits(normalizedAmount),
-    clerkUserId: normalizedClerkUserId,
     currency,
     customerEmail: normalizedCustomerEmail,
     customerName: normalizedCustomerName,
@@ -156,10 +149,10 @@ export function createPostHandler({
   reservePaymentForInvoiceCreationFn?: typeof reservePaymentForInvoiceCreation;
 } = {}) {
   return async function POST(request: Request) {
-    const unauthorizedResponse = await requireAuthenticatedAdminFn(request);
+    const access = await requireAuthenticatedAdminFn(request);
 
-    if (unauthorizedResponse) {
-      return unauthorizedResponse;
+    if (!access.ok) {
+      return access.response;
     }
 
     let paymentId: string | null = null;
@@ -181,13 +174,16 @@ export function createPostHandler({
 
       const input = {
         ...parsedInput,
+        authUserId: access.admin.userId,
+        customerEmail:
+          parsedInput.customerEmail ?? access.admin.email ?? undefined,
         idempotencyKey: getIdempotencyKey(request, parsedInput.idempotencyKey),
       };
 
       const paymentDraft = await createPaymentDraftFn({
         appUserId: input.appUserId,
         amountMinor: input.amountMinor,
-        clerkUserId: input.clerkUserId,
+        authUserId: input.authUserId,
         currency: input.currency,
         customerEmail: input.customerEmail,
         customerName: input.customerName,

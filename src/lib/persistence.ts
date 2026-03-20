@@ -1,13 +1,3 @@
-import {
-  buildFullName,
-  type ClerkUser,
-  cleanNullableText,
-  getClerkDatabaseUserId,
-  getClerkPrimaryEmail,
-  getClerkUserRole,
-  syncClerkUserMetadata,
-  toDateFromClerkTimestamp,
-} from "./clerk";
 import { getDatabase } from "./database";
 import type {
   MonobankInvoiceStatusResponse,
@@ -16,16 +6,9 @@ import type {
 import { normalizeMonobankStatus, type PaymentStatus } from "./payments";
 
 interface AppUserRow {
-  clerk_user_id: string;
+  auth_user_id: string;
   email: string | null;
   id: string;
-  raw_clerk_data?: unknown;
-}
-
-interface AppUserIdentityInput {
-  appUserId?: string | null;
-  clerkUserId: string;
-  email?: string | null;
 }
 
 interface PaymentDraftRow {
@@ -40,12 +23,17 @@ interface PaymentDraftRow {
 export interface CreatePaymentDraftInput {
   appUserId?: string | null;
   amountMinor: number;
-  clerkUserId: string;
+  authUserId: string;
   currency: SupportedCurrency;
   customerEmail?: string | null;
   customerName: string;
   description: string;
   idempotencyKey?: string | null;
+}
+
+function cleanNullableText(value?: string | null) {
+  const trimmedValue = value?.trim();
+  return trimmedValue ? trimmedValue : null;
 }
 
 export interface PaymentCreationState {
@@ -72,36 +60,6 @@ function getRequiredRow<T>(rows: T[], errorMessage: string) {
   return row;
 }
 
-function getRoleFromRawClerkData(rawClerkData: unknown) {
-  if (!rawClerkData || typeof rawClerkData !== "object") {
-    return null;
-  }
-
-  const privateMetadata = Reflect.get(rawClerkData, "private_metadata");
-
-  if (!privateMetadata || typeof privateMetadata !== "object") {
-    return null;
-  }
-
-  const role = Reflect.get(privateMetadata, "role");
-
-  return role === "admin" || role === "user" ? role : null;
-}
-
-export function getPreferredClerkRole({
-  currentRole,
-  matchedAppUser,
-}: {
-  currentRole: ReturnType<typeof getClerkUserRole>;
-  matchedAppUser?: AppUserRow | null;
-}) {
-  return (
-    currentRole ??
-    getRoleFromRawClerkData(matchedAppUser?.raw_clerk_data) ??
-    "user"
-  );
-}
-
 export function shouldBootstrapAppUserByEmail({
   appUserId,
   email,
@@ -110,171 +68,6 @@ export function shouldBootstrapAppUserByEmail({
   email?: string | null;
 }) {
   return !appUserId && Boolean(email);
-}
-
-async function findExistingAppUser({
-  appUserId,
-  clerkUserId,
-  email,
-}: AppUserIdentityInput) {
-  const database = getDatabase();
-
-  if (appUserId) {
-    const appUsers = await database<AppUserRow[]>`
-      select id, clerk_user_id, email, raw_clerk_data
-      from app_users
-      where id = ${appUserId}
-      limit 1
-    `;
-
-    return appUsers[0] ?? null;
-  }
-
-  const directMatches = await database<AppUserRow[]>`
-    select id, clerk_user_id, email, raw_clerk_data
-    from app_users
-    where clerk_user_id = ${clerkUserId}
-    limit 1
-  `;
-
-  const directMatch = directMatches[0];
-
-  if (directMatch) {
-    return directMatch;
-  }
-
-  if (!shouldBootstrapAppUserByEmail({ appUserId, email })) {
-    return null;
-  }
-
-  const emailMatches = await database<AppUserRow[]>`
-    select id, clerk_user_id, email, raw_clerk_data
-    from app_users
-    where email = ${email}
-      and deleted_at is null
-    order by updated_at desc, created_at desc
-    limit 2
-  `;
-
-  return emailMatches.length === 1 ? emailMatches[0] : null;
-}
-
-export async function upsertClerkUser(user: ClerkUser) {
-  const clerkUserId = cleanNullableText(user.id);
-
-  if (!clerkUserId) {
-    throw new Error("Clerk user payload is missing id.");
-  }
-
-  const database = getDatabase();
-  const email = getClerkPrimaryEmail(user);
-  const appUserId = getClerkDatabaseUserId(user);
-  const firstName = cleanNullableText(user.first_name);
-  const lastName = cleanNullableText(user.last_name);
-  const fullName = buildFullName(firstName, lastName);
-  const imageUrl = cleanNullableText(user.image_url);
-  const matchedAppUser = await findExistingAppUser({
-    appUserId,
-    clerkUserId,
-    email,
-  });
-
-  const appUsers = matchedAppUser
-    ? await database<AppUserRow[]>`
-        update app_users
-        set
-          clerk_user_id = ${clerkUserId},
-          email = ${email},
-          first_name = ${firstName},
-          last_name = ${lastName},
-          full_name = ${fullName},
-          image_url = ${imageUrl},
-          clerk_created_at = ${toDateFromClerkTimestamp(user.created_at)},
-          clerk_updated_at = ${toDateFromClerkTimestamp(user.updated_at)},
-          raw_clerk_data = ${JSON.stringify(user)}::jsonb,
-          deleted_at = null,
-          updated_at = timezone('utc', now())
-        where id = ${matchedAppUser.id}
-        returning id, clerk_user_id, email
-      `
-    : await database<AppUserRow[]>`
-        insert into app_users (
-          clerk_user_id,
-          email,
-          first_name,
-          last_name,
-          full_name,
-          image_url,
-          clerk_created_at,
-          clerk_updated_at,
-          raw_clerk_data
-        )
-        values (
-          ${clerkUserId},
-          ${email},
-          ${firstName},
-          ${lastName},
-          ${fullName},
-          ${imageUrl},
-          ${toDateFromClerkTimestamp(user.created_at)},
-          ${toDateFromClerkTimestamp(user.updated_at)},
-          ${JSON.stringify(user)}::jsonb
-        )
-        on conflict (clerk_user_id) do update
-        set
-          email = excluded.email,
-          first_name = excluded.first_name,
-          last_name = excluded.last_name,
-          full_name = excluded.full_name,
-          image_url = excluded.image_url,
-          clerk_created_at = excluded.clerk_created_at,
-          clerk_updated_at = excluded.clerk_updated_at,
-          raw_clerk_data = excluded.raw_clerk_data,
-          deleted_at = null,
-          updated_at = timezone('utc', now())
-        returning id, clerk_user_id, email
-      `;
-
-  const appUser = getRequiredRow(
-    appUsers,
-    `Failed to upsert Clerk user ${clerkUserId}.`,
-  );
-
-  await syncClerkUserMetadata({
-    appUserId: appUser.id,
-    role: getPreferredClerkRole({
-      currentRole: getClerkUserRole(user),
-      matchedAppUser,
-    }),
-    user,
-  });
-
-  return appUser;
-}
-
-export async function markClerkUserDeleted(
-  clerkUserId: string,
-  rawPayload: unknown,
-) {
-  const database = getDatabase();
-
-  await database`
-    insert into app_users (
-      clerk_user_id,
-      raw_clerk_data,
-      deleted_at
-    )
-    values (
-      ${clerkUserId},
-      ${toJsonbValue(rawPayload)}::jsonb,
-      timezone('utc', now())
-    )
-    on conflict (clerk_user_id) do update
-    set
-      raw_clerk_data = excluded.raw_clerk_data,
-      deleted_at = timezone('utc', now()),
-      updated_at = timezone('utc', now())
-  `;
 }
 
 export async function createPaymentDraft(
@@ -295,19 +88,19 @@ export async function createPaymentDraft(
   const payment = await database.begin(async (sql) => {
     const matchedByAppUserId = appUserId
       ? await sql<AppUserRow[]>`
-          select id, clerk_user_id, email
+          select id, auth_user_id, email
           from app_users
           where id = ${appUserId}
           limit 1
           for update
         `
       : [];
-    const matchedByClerkUserId = matchedByAppUserId[0]
+    const matchedByAuthUserId = matchedByAppUserId[0]
       ? []
       : await sql<AppUserRow[]>`
-          select id, clerk_user_id, email
+          select id, auth_user_id, email
           from app_users
-          where clerk_user_id = ${input.clerkUserId}
+          where auth_user_id = ${input.authUserId}
           limit 1
           for update
         `;
@@ -316,7 +109,7 @@ export async function createPaymentDraft(
       email: customerEmail,
     })
       ? await sql<AppUserRow[]>`
-          select id, clerk_user_id, email
+          select id, auth_user_id, email
           from app_users
           where email = ${customerEmail}
             and deleted_at is null
@@ -327,43 +120,43 @@ export async function createPaymentDraft(
       : [];
     const matchedAppUser =
       matchedByAppUserId[0] ??
-      matchedByClerkUserId[0] ??
+      matchedByAuthUserId[0] ??
       (emailMatches.length === 1 ? emailMatches[0] : null);
     const appUsers = matchedAppUser
       ? await sql<AppUserRow[]>`
           update app_users
           set
-            clerk_user_id = ${input.clerkUserId},
+            auth_user_id = ${input.authUserId},
             email = coalesce(${customerEmail}, app_users.email),
             full_name = coalesce(${customerName}, app_users.full_name),
             deleted_at = null,
             updated_at = timezone('utc', now())
           where id = ${matchedAppUser.id}
-          returning id, clerk_user_id, email
+          returning id, auth_user_id, email
         `
       : await sql<AppUserRow[]>`
           insert into app_users (
-            clerk_user_id,
+            auth_user_id,
             email,
             full_name
           )
           values (
-            ${input.clerkUserId},
+            ${input.authUserId},
             ${customerEmail},
             ${customerName}
           )
-          on conflict (clerk_user_id) do update
+          on conflict (auth_user_id) do update
           set
             email = coalesce(excluded.email, app_users.email),
             full_name = coalesce(excluded.full_name, app_users.full_name),
             deleted_at = null,
             updated_at = timezone('utc', now())
-          returning id, clerk_user_id, email
+          returning id, auth_user_id, email
         `;
 
     const appUser = getRequiredRow(
       appUsers,
-      `Failed to create or load app user ${input.clerkUserId}.`,
+      `Failed to create or load app user ${input.authUserId}.`,
     );
 
     if (idempotencyKey) {

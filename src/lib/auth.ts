@@ -1,85 +1,152 @@
-import type { AppUserRole } from "./clerk";
+import { isAdminUser } from "./admin";
+import { auth } from "./better-auth";
 import { env } from "./env";
 import { getErrorMessage } from "./errors";
 import { json } from "./response";
 
-let clerkClient: ClerkAuthClient | null = null;
+export interface AuthenticatedAdmin {
+  email: string | null;
+  name: string | null;
+  role: "admin";
+  userId: string;
+}
 
-interface ClerkAuthClient {
-  authenticateRequest(
-    request: Request,
-    options: {
-      acceptsToken: "session_token";
-      authorizedParties?: string[];
-    },
-  ): Promise<{
-    isAuthenticated: boolean;
-    toAuth(): {
-      userId?: string | null;
-    };
-  }>;
-  users: {
-    getUser(userId: string): Promise<{
-      privateMetadata: {
-        role?: unknown;
-      };
-    }>;
+type AuthSessionRecord = {
+  id: string;
+  userId: string;
+  [key: string]: unknown;
+};
+
+type AuthUser = {
+  email: string;
+  id: string;
+  name: string;
+  role?: string | null;
+  [key: string]: unknown;
+};
+
+type AuthSessionPayload = {
+  session: AuthSessionRecord;
+  user: AuthUser;
+};
+
+type AuthApi = {
+  api: {
+    getSession: (context: {
+      headers: Headers;
+    }) => Promise<AuthSessionPayload | null>;
   };
+};
+
+type ResolvedAdminSessionResult =
+  | {
+      admin: AuthenticatedAdmin;
+      ok: true;
+      session: AuthSessionRecord;
+      user: AuthUser;
+    }
+  | {
+      ok: false;
+      response: Response;
+    };
+
+type RequireAuthenticatedAdminResult =
+  | {
+      admin: AuthenticatedAdmin;
+      ok: true;
+    }
+  | {
+      ok: false;
+      response: Response;
+    };
+
+function getTrimmedHeader(headers: Headers, name: string) {
+  const value = headers.get(name)?.trim();
+  return value ? value : null;
 }
 
-async function getClerkClient() {
-  if (!clerkClient) {
-    const { createClerkClient } = await import("@clerk/backend");
+export async function resolveAdminSession(
+  request: Request,
+  authInstance: AuthApi = auth,
+): Promise<ResolvedAdminSessionResult> {
+  try {
+    const session = await authInstance.api.getSession({
+      headers: request.headers,
+    });
 
-    clerkClient = createClerkClient({
-      publishableKey: env.clerkPublishableKey,
-      secretKey: env.clerkSecretKey,
-    }) as unknown as ClerkAuthClient;
+    if (!session) {
+      return {
+        ok: false,
+        response: json({ error: "Unauthorized." }, { status: 401 }),
+      };
+    }
+
+    if (!isAdminUser(session.user)) {
+      return {
+        ok: false,
+        response: json({ error: "Forbidden." }, { status: 403 }),
+      };
+    }
+
+    return {
+      admin: {
+        email: session.user.email,
+        name: session.user.name,
+        role: "admin",
+        userId: session.user.id,
+      },
+      ok: true,
+      session: session.session,
+      user: session.user,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      response: json(
+        { error: `Failed to authorize request: ${getErrorMessage(error)}` },
+        { status: 500 },
+      ),
+    };
   }
-
-  return clerkClient;
-}
-
-function getRole(value: unknown): AppUserRole | null {
-  return value === "admin" || value === "user" ? value : null;
 }
 
 export function createRequireAuthenticatedAdmin(
-  clerkClientFactory: () => ClerkAuthClient | Promise<ClerkAuthClient> = () =>
-    getClerkClient(),
+  getInternalApiKey: () => string = () => env.internalApiKey,
+  getAuthInstance: () => AuthApi = () => auth,
 ) {
-  return async function requireAuthenticatedAdmin(request: Request) {
+  return async function requireAuthenticatedAdmin(
+    request: Request,
+  ): Promise<RequireAuthenticatedAdminResult> {
     try {
-      const clerkClient = await clerkClientFactory();
-
-      const requestState = await clerkClient.authenticateRequest(request, {
-        acceptsToken: "session_token",
-        authorizedParties: env.clerkAuthorizedParties,
-      });
-
-      if (!requestState.isAuthenticated) {
-        return json({ error: "Unauthorized." }, { status: 401 });
-      }
-
-      const { userId } = requestState.toAuth();
-
-      if (!userId) {
-        return json({ error: "Unauthorized." }, { status: 401 });
-      }
-
-      const user = await clerkClient.users.getUser(userId);
-      const role = getRole(user.privateMetadata.role);
-
-      if (role !== "admin") {
-        return json({ error: "Forbidden." }, { status: 403 });
-      }
-
-      return null;
-    } catch (error) {
-      return json(
-        { error: `Failed to authorize request: ${getErrorMessage(error)}` },
-        { status: 500 },
+      const internalApiKey = getTrimmedHeader(
+        request.headers,
+        "x-internal-api-key",
       );
+
+      if (!internalApiKey || internalApiKey !== getInternalApiKey()) {
+        return {
+          ok: false,
+          response: json({ error: "Unauthorized." }, { status: 401 }),
+        };
+      }
+      const access = await resolveAdminSession(request, getAuthInstance());
+
+      if (!access.ok) {
+        return access;
+      }
+
+      return {
+        admin: access.admin,
+        ok: true,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        response: json(
+          { error: `Failed to authorize request: ${getErrorMessage(error)}` },
+          { status: 500 },
+        ),
+      };
     }
   };
 }

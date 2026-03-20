@@ -5,10 +5,10 @@ import { syncMonobankPaymentStatus } from "../../../src/lib/persistence";
 import { json } from "../../../src/lib/response";
 
 export async function GET(request: Request) {
-  const unauthorizedResponse = await requireAuthenticatedAdmin(request);
+  const access = await requireAuthenticatedAdmin(request);
 
-  if (unauthorizedResponse) {
-    return unauthorizedResponse;
+  if (!access.ok) {
+    return access.response;
   }
 
   try {
