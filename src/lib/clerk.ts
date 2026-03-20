@@ -1,4 +1,3 @@
-import { Webhook } from "svix";
 import { env } from "./env";
 
 export type AppUserRole = "admin" | "user";
@@ -31,15 +30,6 @@ export interface ClerkUser {
   username?: string | null;
 }
 
-export interface ClerkDeletedUser {
-  id?: string | null;
-}
-
-export interface ClerkWebhookEvent<TData = unknown> {
-  data: TData;
-  type: string;
-}
-
 function getClerkBackendApiBaseUrl() {
   return "https://api.clerk.com/v1";
 }
@@ -48,29 +38,6 @@ function getClerkPrivateMetadata(user: ClerkUser) {
   return user.private_metadata && typeof user.private_metadata === "object"
     ? { ...user.private_metadata }
     : {};
-}
-
-function getRequiredSvixHeader(request: Request, headerName: string) {
-  const headerValue = request.headers.get(headerName)?.trim();
-
-  if (!headerValue) {
-    throw new Error(`Missing ${headerName} header.`);
-  }
-
-  return headerValue;
-}
-
-export async function verifyClerkWebhook(request: Request) {
-  const payload = await request.text();
-  const webhook = new Webhook(env.clerkWebhookSecret);
-
-  const event = webhook.verify(payload, {
-    "svix-id": getRequiredSvixHeader(request, "svix-id"),
-    "svix-signature": getRequiredSvixHeader(request, "svix-signature"),
-    "svix-timestamp": getRequiredSvixHeader(request, "svix-timestamp"),
-  }) as ClerkWebhookEvent;
-
-  return { event };
 }
 
 export function cleanNullableText(value?: string | null) {
@@ -148,6 +115,34 @@ export function toDateFromClerkTimestamp(value?: number | null) {
   }
 
   return new Date(value).toISOString();
+}
+
+export async function getClerkUserById(
+  clerkUserId: string,
+): Promise<ClerkUser> {
+  const normalizedClerkUserId = cleanNullableText(clerkUserId);
+
+  if (!normalizedClerkUserId) {
+    throw new Error("Clerk user id is required.");
+  }
+
+  const response = await fetch(
+    `${getClerkBackendApiBaseUrl()}/users/${encodeURIComponent(normalizedClerkUserId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${env.clerkSecretKey}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Failed to fetch Clerk user ${normalizedClerkUserId}: ${errorText}`,
+    );
+  }
+
+  return (await response.json()) as ClerkUser;
 }
 
 export async function syncClerkUserMetadata({

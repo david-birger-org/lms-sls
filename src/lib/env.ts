@@ -13,18 +13,6 @@ function getRequiredEnv(name: string) {
   return value;
 }
 
-function getRequiredEnvGroup(names: string[]) {
-  for (const name of names) {
-    const value = readEnv(name);
-
-    if (value) {
-      return value;
-    }
-  }
-
-  throw new Error(`${names.join(" or ")} is missing in environment variables.`);
-}
-
 function getOptionalCsvEnv(name: string) {
   const value = readEnv(name);
 
@@ -49,12 +37,6 @@ export const env = {
   },
   get clerkSecretKey() {
     return getRequiredEnv("CLERK_SECRET_KEY");
-  },
-  get clerkWebhookSecret() {
-    return getRequiredEnvGroup([
-      "CLERK_WEBHOOK_SECRET",
-      "CLERK_WEBHOOK_SIGNING_SECRET",
-    ]);
   },
   get databaseUrl() {
     return getRequiredEnv("DATABASE_URL");

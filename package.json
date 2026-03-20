@@ -13,8 +13,7 @@
   },
   "dependencies": {
     "@clerk/backend": "^3.2.1",
-    "qrcode": "^1.5.4",
-    "svix": "^1.88.0"
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.8",
