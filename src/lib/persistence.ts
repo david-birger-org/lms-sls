@@ -1,9 +1,9 @@
-import { getDatabase } from "./database";
+import { getDatabase } from "./database.js";
 import type {
   MonobankInvoiceStatusResponse,
   SupportedCurrency,
-} from "./monobank";
-import { normalizeMonobankStatus, type PaymentStatus } from "./payments";
+} from "./monobank.js";
+import { normalizeMonobankStatus, type PaymentStatus } from "./payments.js";
 
 interface AppUserRow {
   auth_user_id: string;

@@ -1,4 +1,4 @@
-import { resolveAdminSession } from "../../src/lib/auth";
+import { resolveAdminSession } from "../../src/lib/auth.js";
 
 export async function GET(request: Request) {
   const access = await resolveAdminSession(request);

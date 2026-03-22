@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createRequireAuthenticatedAdmin } from "./auth";
+import { createRequireAuthenticatedAdmin } from "./auth.js";
 
 function createAuthModuleStub(
   session: {

@@ -1,8 +1,8 @@
-import { requireAuthenticatedAdmin } from "../../../src/lib/auth";
-import { getErrorMessage } from "../../../src/lib/errors";
-import { fetchInvoiceStatus } from "../../../src/lib/monobank";
-import { syncMonobankPaymentStatus } from "../../../src/lib/persistence";
-import { json } from "../../../src/lib/response";
+import { requireAuthenticatedAdmin } from "../../../src/lib/auth.js";
+import { getErrorMessage } from "../../../src/lib/errors.js";
+import { fetchInvoiceStatus } from "../../../src/lib/monobank.js";
+import { syncMonobankPaymentStatus } from "../../../src/lib/persistence.js";
+import { json } from "../../../src/lib/response.js";
 
 export async function GET(request: Request) {
   const access = await requireAuthenticatedAdmin(request);

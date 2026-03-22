@@ -1,5 +1,5 @@
 import { SQL } from "bun";
-import { env } from "./env";
+import { env } from "./env.js";
 
 const DATABASE_POOL_MAX = 5;
 const DATABASE_IDLE_TIMEOUT_SECONDS = 30;

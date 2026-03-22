@@ -1,6 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
-import type { PaymentCreationState } from "../../src/lib/persistence";
-import { createPostHandler } from "./invoice";
+import type { PaymentCreationState } from "../../src/lib/persistence.js";
+import { createPostHandler } from "./invoice.js";
 
 const baseRequestBody = {
   amount: 125,

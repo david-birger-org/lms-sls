@@ -1,8 +1,7 @@
-import { isAdminUser } from "./admin";
-import { auth } from "./better-auth";
-import { env } from "./env";
-import { getErrorMessage } from "./errors";
-import { json } from "./response";
+import { isAdminUser } from "./admin.js";
+import { env } from "./env.js";
+import { getErrorMessage } from "./errors.js";
+import { json } from "./response.js";
 
 export interface AuthenticatedAdmin {
   email: string | null;
@@ -67,10 +66,12 @@ function getTrimmedHeader(headers: Headers, name: string) {
 
 export async function resolveAdminSession(
   request: Request,
-  authInstance: AuthApi = auth,
+  authInstance?: AuthApi,
 ): Promise<ResolvedAdminSessionResult> {
   try {
-    const session = await authInstance.api.getSession({
+    const resolvedAuth =
+      authInstance ?? (await import("./better-auth.js")).auth;
+    const session = await resolvedAuth.api.getSession({
       headers: request.headers,
     });
 
@@ -112,7 +113,8 @@ export async function resolveAdminSession(
 
 export function createRequireAuthenticatedAdmin(
   getInternalApiKey: () => string = () => env.internalApiKey,
-  getAuthInstance: () => AuthApi = () => auth,
+  getAuthInstance: () => Promise<AuthApi> | AuthApi = async () =>
+    (await import("./better-auth.js")).auth,
 ) {
   return async function requireAuthenticatedAdmin(
     request: Request,
@@ -129,7 +131,10 @@ export function createRequireAuthenticatedAdmin(
           response: json({ error: "Unauthorized." }, { status: 401 }),
         };
       }
-      const access = await resolveAdminSession(request, getAuthInstance());
+      const access = await resolveAdminSession(
+        request,
+        await getAuthInstance(),
+      );
 
       if (!access.ok) {
         return access;

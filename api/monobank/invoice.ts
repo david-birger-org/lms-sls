@@ -1,19 +1,19 @@
 import QRCode from "qrcode";
-import { requireAuthenticatedAdmin } from "../../src/lib/auth";
-import { getErrorMessage } from "../../src/lib/errors";
+import { requireAuthenticatedAdmin } from "../../src/lib/auth.js";
+import { getErrorMessage } from "../../src/lib/errors.js";
 import {
   createInvoice,
   type MonobankInvoiceResponse,
   type SupportedCurrency,
   toMinorUnits,
-} from "../../src/lib/monobank";
+} from "../../src/lib/monobank.js";
 import {
   completePaymentCreation,
   createPaymentDraft,
   markPaymentCreationFailed,
   reservePaymentForInvoiceCreation,
-} from "../../src/lib/persistence";
-import { json } from "../../src/lib/response";
+} from "../../src/lib/persistence.js";
+import { json } from "../../src/lib/response.js";
 
 type OutputMode = "link" | "qr";
 

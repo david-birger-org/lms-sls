@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { shouldBootstrapAppUserByEmail } from "./persistence";
+import { shouldBootstrapAppUserByEmail } from "./persistence.js";
 
 describe("shouldBootstrapAppUserByEmail", () => {
   it("allows email bootstrap before a canonical app user id exists", () => {

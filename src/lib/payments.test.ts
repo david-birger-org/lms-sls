@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { normalizeMonobankStatus } from "./payments";
+import { normalizeMonobankStatus } from "./payments.js";
 
 describe("normalizeMonobankStatus", () => {
   it("maps external Monobank statuses to internal statuses", () => {

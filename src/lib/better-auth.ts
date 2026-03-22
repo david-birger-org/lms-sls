@@ -2,8 +2,8 @@ import { dash } from "@better-auth/infra";
 import { betterAuth } from "better-auth";
 import { Pool } from "pg";
 
-import { isAdminEmail } from "./admin";
-import { env } from "./env";
+import { isAdminEmail } from "./admin.js";
+import { env } from "./env.js";
 
 declare global {
   var __lmsSlsAuthPool: Pool | undefined;
