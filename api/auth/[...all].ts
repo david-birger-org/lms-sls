@@ -1,19 +1,16 @@
-async function getAuth() {
-  const module = await import("../../src/lib/better-auth.js");
-  return module.auth;
-}
+import { getAuth } from "../../src/lib/better-auth.js";
 
 export async function GET(request: Request) {
-  const auth = await getAuth();
+  const auth = getAuth();
   return auth.handler(request);
 }
 
 export async function POST(request: Request) {
-  const auth = await getAuth();
+  const auth = getAuth();
   return auth.handler(request);
 }
 
 export async function OPTIONS(request: Request) {
-  const auth = await getAuth();
+  const auth = getAuth();
   return auth.handler(request);
 }

@@ -1,4 +1,5 @@
 import { isAdminUser } from "./admin.js";
+import { getAuth } from "./better-auth.js";
 import { env } from "./env.js";
 import { getErrorMessage } from "./errors.js";
 import { json } from "./response.js";
@@ -69,8 +70,7 @@ export async function resolveAdminSession(
   authInstance?: AuthApi,
 ): Promise<ResolvedAdminSessionResult> {
   try {
-    const resolvedAuth =
-      authInstance ?? (await import("./better-auth.js")).auth;
+    const resolvedAuth = authInstance ?? getAuth();
     const session = await resolvedAuth.api.getSession({
       headers: request.headers,
     });
@@ -113,8 +113,7 @@ export async function resolveAdminSession(
 
 export function createRequireAuthenticatedAdmin(
   getInternalApiKey: () => string = () => env.internalApiKey,
-  getAuthInstance: () => Promise<AuthApi> | AuthApi = async () =>
-    (await import("./better-auth.js")).auth,
+  getAuthInstance: () => Promise<AuthApi> | AuthApi = () => getAuth(),
 ) {
   return async function requireAuthenticatedAdmin(
     request: Request,

@@ -6,8 +6,112 @@ import { isAdminEmail } from "./admin.js";
 import { env } from "./env.js";
 
 declare global {
+  var __lmsSlsAuth: AuthInstance | undefined;
   var __lmsSlsAuthPool: Pool | undefined;
 }
+
+function createAuth() {
+  return betterAuth({
+    advanced: {
+      ...(getCrossSubDomainCookies()
+        ? {
+            crossSubDomainCookies: getCrossSubDomainCookies(),
+          }
+        : {}),
+      database: {
+        generateId: () => crypto.randomUUID(),
+      },
+      useSecureCookies: process.env.NODE_ENV === "production",
+    },
+    appName: "LMS Admin",
+    baseURL: env.betterAuthUrl,
+    database: getPool(),
+    databaseHooks: {
+      user: {
+        create: {
+          before: async (user) => ({
+            data: {
+              ...user,
+              role: isAdminEmail(user.email) ? "admin" : "user",
+            },
+          }),
+        },
+        update: {
+          before: async (user) => {
+            if (typeof user.email !== "string") {
+              return { data: user };
+            }
+
+            return {
+              data: {
+                ...user,
+                role: isAdminEmail(user.email) ? "admin" : "user",
+              },
+            };
+          },
+        },
+      },
+    },
+    emailAndPassword: {
+      enabled: true,
+    },
+    plugins: [dash()],
+    secret: env.betterAuthSecret,
+    trustedOrigins: getTrustedOrigins(),
+    account: {
+      fields: {
+        accessToken: "access_token",
+        accessTokenExpiresAt: "access_token_expires_at",
+        accountId: "account_id",
+        createdAt: "created_at",
+        idToken: "id_token",
+        providerId: "provider_id",
+        refreshToken: "refresh_token",
+        refreshTokenExpiresAt: "refresh_token_expires_at",
+        updatedAt: "updated_at",
+        userId: "user_id",
+      },
+      modelName: "auth_accounts",
+    },
+    session: {
+      fields: {
+        createdAt: "created_at",
+        expiresAt: "expires_at",
+        ipAddress: "ip_address",
+        updatedAt: "updated_at",
+        userAgent: "user_agent",
+        userId: "user_id",
+      },
+      modelName: "auth_sessions",
+    },
+    user: {
+      additionalFields: {
+        role: {
+          defaultValue: "user",
+          input: false,
+          required: false,
+          type: ["user", "admin"],
+        },
+      },
+      fields: {
+        createdAt: "created_at",
+        emailVerified: "email_verified",
+        updatedAt: "updated_at",
+      },
+      modelName: "auth_users",
+    },
+    verification: {
+      fields: {
+        createdAt: "created_at",
+        expiresAt: "expires_at",
+        updatedAt: "updated_at",
+      },
+      modelName: "auth_verifications",
+    },
+  });
+}
+
+type AuthInstance = ReturnType<typeof createAuth>;
 
 function readCsvEnv(value: string | null) {
   if (!value) {
@@ -69,103 +173,12 @@ function getPool() {
   return globalThis.__lmsSlsAuthPool;
 }
 
-export const auth = betterAuth({
-  advanced: {
-    ...(getCrossSubDomainCookies()
-      ? {
-          crossSubDomainCookies: getCrossSubDomainCookies(),
-        }
-      : {}),
-    database: {
-      generateId: () => crypto.randomUUID(),
-    },
-    useSecureCookies: process.env.NODE_ENV === "production",
-  },
-  appName: "LMS Admin",
-  baseURL: env.betterAuthUrl,
-  database: getPool(),
-  databaseHooks: {
-    user: {
-      create: {
-        before: async (user) => ({
-          data: {
-            ...user,
-            role: isAdminEmail(user.email) ? "admin" : "user",
-          },
-        }),
-      },
-      update: {
-        before: async (user) => {
-          if (typeof user.email !== "string") {
-            return { data: user };
-          }
+export function getAuth() {
+  if (!globalThis.__lmsSlsAuth) {
+    globalThis.__lmsSlsAuth = createAuth();
+  }
 
-          return {
-            data: {
-              ...user,
-              role: isAdminEmail(user.email) ? "admin" : "user",
-            },
-          };
-        },
-      },
-    },
-  },
-  emailAndPassword: {
-    enabled: true,
-  },
-  plugins: [dash()],
-  secret: env.betterAuthSecret,
-  trustedOrigins: getTrustedOrigins(),
-  account: {
-    fields: {
-      accessToken: "access_token",
-      accessTokenExpiresAt: "access_token_expires_at",
-      accountId: "account_id",
-      createdAt: "created_at",
-      idToken: "id_token",
-      providerId: "provider_id",
-      refreshToken: "refresh_token",
-      refreshTokenExpiresAt: "refresh_token_expires_at",
-      updatedAt: "updated_at",
-      userId: "user_id",
-    },
-    modelName: "auth_accounts",
-  },
-  session: {
-    fields: {
-      createdAt: "created_at",
-      expiresAt: "expires_at",
-      ipAddress: "ip_address",
-      updatedAt: "updated_at",
-      userAgent: "user_agent",
-      userId: "user_id",
-    },
-    modelName: "auth_sessions",
-  },
-  user: {
-    additionalFields: {
-      role: {
-        defaultValue: "user",
-        input: false,
-        required: false,
-        type: ["user", "admin"],
-      },
-    },
-    fields: {
-      createdAt: "created_at",
-      emailVerified: "email_verified",
-      updatedAt: "updated_at",
-    },
-    modelName: "auth_users",
-  },
-  verification: {
-    fields: {
-      createdAt: "created_at",
-      expiresAt: "expires_at",
-      updatedAt: "updated_at",
-    },
-    modelName: "auth_verifications",
-  },
-});
+  return globalThis.__lmsSlsAuth;
+}
 
-export type AuthSession = typeof auth.$Infer.Session;
+export type AuthSession = AuthInstance["$Infer"]["Session"];
