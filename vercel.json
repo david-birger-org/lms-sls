@@ -2,7 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "devCommand": null,
-  "bunVersion": "1.x",
   "rewrites": [
     {
       "source": "/api/auth/callback/:match*",
