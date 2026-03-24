@@ -1,10 +1,10 @@
-import { requireAuthenticatedAdmin } from "../../src/lib/auth.js";
 import { getErrorMessage } from "../../src/lib/errors.js";
+import { requireTrustedInternalAdmin } from "../../src/lib/internal-auth.js";
 import { fetchStatement, getRangeDays } from "../../src/lib/monobank.js";
 import { json } from "../../src/lib/response.js";
 
 export async function GET(request: Request) {
-  const access = await requireAuthenticatedAdmin(request);
+  const access = await requireTrustedInternalAdmin(request);
 
   if (!access.ok) {
     return access.response;

@@ -14,27 +14,6 @@ function getRequiredEnv(name: string) {
 }
 
 export const env = {
-  get betterAuthApiKey() {
-    return readEnv("BETTER_AUTH_API_KEY");
-  },
-  get betterAuthApiUrl() {
-    return readEnv("BETTER_AUTH_API_URL");
-  },
-  get betterAuthCookieDomain() {
-    return readEnv("BETTER_AUTH_COOKIE_DOMAIN");
-  },
-  get betterAuthKvUrl() {
-    return readEnv("BETTER_AUTH_KV_URL");
-  },
-  get betterAuthSecret() {
-    return getRequiredEnv("BETTER_AUTH_SECRET");
-  },
-  get betterAuthTrustedOrigins() {
-    return readEnv("BETTER_AUTH_TRUSTED_ORIGINS");
-  },
-  get betterAuthUrl() {
-    return getRequiredEnv("BETTER_AUTH_URL");
-  },
   get databaseUrl() {
     return getRequiredEnv("DATABASE_URL");
   },

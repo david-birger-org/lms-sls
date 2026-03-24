@@ -67,7 +67,7 @@ describe("POST /api/monobank/invoice", () => {
         }),
       }),
       markPaymentCreationFailedFn: async () => undefined,
-      requireAuthenticatedAdminFn: async () => ({
+      requireTrustedInternalAdminFn: async () => ({
         admin: {
           email: "person@example.com",
           name: "Ada Lovelace",
@@ -108,7 +108,7 @@ describe("POST /api/monobank/invoice", () => {
       createInvoiceFn,
       createPaymentDraftFn,
       markPaymentCreationFailedFn: async () => undefined,
-      requireAuthenticatedAdminFn: async () => ({
+      requireTrustedInternalAdminFn: async () => ({
         admin: {
           email: "person@example.com",
           name: "Ada Lovelace",
@@ -164,7 +164,7 @@ describe("POST /api/monobank/invoice", () => {
         }),
       }),
       markPaymentCreationFailedFn: async () => undefined,
-      requireAuthenticatedAdminFn: async () => ({
+      requireTrustedInternalAdminFn: async () => ({
         admin: {
           email: "person@example.com",
           name: "Ada Lovelace",

@@ -2,39 +2,5 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "devCommand": null,
-  "bunVersion": "1.x",
-  "rewrites": [
-    {
-      "source": "/api/auth/callback/:match*",
-      "destination": "/api/auth/[...all]"
-    },
-    {
-      "source": "/api/auth/dash/:match*",
-      "destination": "/api/auth/[...all]"
-    },
-    {
-      "source": "/api/auth/email-otp/:match*",
-      "destination": "/api/auth/[...all]"
-    },
-    {
-      "source": "/api/auth/magic-link/:match*",
-      "destination": "/api/auth/[...all]"
-    },
-    {
-      "source": "/api/auth/oauth2/:match*",
-      "destination": "/api/auth/[...all]"
-    },
-    {
-      "source": "/api/auth/sign-in/:match*",
-      "destination": "/api/auth/[...all]"
-    },
-    {
-      "source": "/api/auth/sign-up/:match*",
-      "destination": "/api/auth/[...all]"
-    },
-    {
-      "source": "/api/auth/two-factor/:match*",
-      "destination": "/api/auth/[...all]"
-    }
-  ]
+  "bunVersion": "1.x"
 }

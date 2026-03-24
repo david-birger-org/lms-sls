@@ -1,6 +1,6 @@
 import QRCode from "qrcode";
-import { requireAuthenticatedAdmin } from "../../src/lib/auth.js";
 import { getErrorMessage } from "../../src/lib/errors.js";
+import { requireTrustedInternalAdmin } from "../../src/lib/internal-auth.js";
 import {
   createInvoice,
   type MonobankInvoiceResponse,
@@ -137,7 +137,7 @@ export function createPostHandler({
   createPaymentDraftFn = createPaymentDraft,
   markPaymentCreationFailedFn = markPaymentCreationFailed,
   qrcodeToDataUrl = QRCode.toDataURL,
-  requireAuthenticatedAdminFn = requireAuthenticatedAdmin,
+  requireTrustedInternalAdminFn = requireTrustedInternalAdmin,
   reservePaymentForInvoiceCreationFn = reservePaymentForInvoiceCreation,
 }: {
   completePaymentCreationFn?: typeof completePaymentCreation;
@@ -145,11 +145,11 @@ export function createPostHandler({
   createPaymentDraftFn?: typeof createPaymentDraft;
   markPaymentCreationFailedFn?: typeof markPaymentCreationFailed;
   qrcodeToDataUrl?: typeof QRCode.toDataURL;
-  requireAuthenticatedAdminFn?: typeof requireAuthenticatedAdmin;
+  requireTrustedInternalAdminFn?: typeof requireTrustedInternalAdmin;
   reservePaymentForInvoiceCreationFn?: typeof reservePaymentForInvoiceCreation;
 } = {}) {
   return async function POST(request: Request) {
-    const access = await requireAuthenticatedAdminFn(request);
+    const access = await requireTrustedInternalAdminFn(request);
 
     if (!access.ok) {
       return access.response;
