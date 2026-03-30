@@ -16,6 +16,11 @@ import {
 import { json } from "../../src/lib/response.js";
 
 type OutputMode = "link" | "qr";
+const DEFAULT_INVOICE_VALIDITY_SECONDS = 24 * 60 * 60;
+
+function getInvoiceExpirationTimestamp(validitySeconds: number) {
+  return new Date(Date.now() + validitySeconds * 1000).toISOString();
+}
 
 interface CreateInvoiceRequestBody {
   appUserId?: unknown;
@@ -26,6 +31,7 @@ interface CreateInvoiceRequestBody {
   description?: unknown;
   idempotencyKey?: unknown;
   output?: unknown;
+  validitySeconds?: unknown;
 }
 
 interface ParsedCreateInvoiceInput {
@@ -37,6 +43,7 @@ interface ParsedCreateInvoiceInput {
   description: string;
   idempotencyKey?: string;
   output: OutputMode;
+  validitySeconds: number;
 }
 
 function badRequest(message: string) {
@@ -63,6 +70,7 @@ function parseCreateInvoiceInput(
     description,
     idempotencyKey,
     output,
+    validitySeconds,
   } = body as CreateInvoiceRequestBody;
   const normalizedAmount = typeof amount === "number" ? amount : Number(amount);
   const normalizedAppUserId = getTrimmedString(appUserId) ?? undefined;
@@ -71,6 +79,10 @@ function parseCreateInvoiceInput(
   const normalizedDescription = getTrimmedString(description);
   const normalizedIdempotencyKey =
     getTrimmedString(idempotencyKey) ?? undefined;
+  const normalizedValiditySeconds =
+    validitySeconds === undefined
+      ? DEFAULT_INVOICE_VALIDITY_SECONDS
+      : Number(validitySeconds);
 
   if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
     return badRequest("Amount must be greater than 0.");
@@ -92,6 +104,13 @@ function parseCreateInvoiceInput(
     return badRequest("Output mode must be link or qr.");
   }
 
+  if (
+    !Number.isInteger(normalizedValiditySeconds) ||
+    normalizedValiditySeconds < 60
+  ) {
+    return badRequest("Expiration time must be at least 60 seconds.");
+  }
+
   return {
     appUserId: normalizedAppUserId,
     amountMinor: toMinorUnits(normalizedAmount),
@@ -101,6 +120,7 @@ function parseCreateInvoiceInput(
     description: normalizedDescription,
     idempotencyKey: normalizedIdempotencyKey,
     output,
+    validitySeconds: normalizedValiditySeconds,
   };
 }
 
@@ -113,17 +133,20 @@ function getIdempotencyKey(request: Request, bodyIdempotencyKey?: string) {
 }
 
 function buildInvoiceResponse({
+  expiresAt,
   invoiceId,
   pageUrl,
   paymentId,
   qrCodeDataUrl,
 }: {
+  expiresAt?: string | null;
   invoiceId?: string | null;
   pageUrl: string;
   paymentId: string;
   qrCodeDataUrl?: string;
 }) {
   return json({
+    expiresAt,
     paymentId,
     invoiceId,
     pageUrl,
@@ -202,6 +225,7 @@ export function createPostHandler({
             : undefined;
 
         return buildInvoiceResponse({
+          expiresAt: paymentDraft.expiresAt,
           invoiceId: paymentDraft.invoiceId,
           pageUrl: paymentDraft.pageUrl,
           paymentId,
@@ -232,6 +256,7 @@ export function createPostHandler({
           customerName: input.customerName,
           description: input.description,
           reference: reservedPayment.reference,
+          validitySeconds: input.validitySeconds,
         });
       } catch (error) {
         const message = getErrorMessage(error);
@@ -260,7 +285,10 @@ export function createPostHandler({
         );
       }
 
+      const expiresAt = getInvoiceExpirationTimestamp(input.validitySeconds);
+
       await completePaymentCreationFn({
+        expiresAt,
         invoiceId: invoice.invoiceId,
         pageUrl: invoice.pageUrl,
         paymentId,
@@ -276,6 +304,7 @@ export function createPostHandler({
           : undefined;
 
       return buildInvoiceResponse({
+        expiresAt,
         invoiceId: invoice.invoiceId,
         pageUrl: invoice.pageUrl,
         paymentId,

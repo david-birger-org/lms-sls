@@ -11,6 +11,7 @@ begin
     'paid',
     'failed',
     'expired',
+    'cancelled',
     'reversed'
   );
 exception
@@ -101,6 +102,7 @@ create table if not exists public.payments (
   customer_email text,
   description text not null,
   page_url text,
+  expires_at timestamptz,
   failure_reason text,
   payment_info jsonb,
   provider_payload jsonb,

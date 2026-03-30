@@ -62,6 +62,11 @@ export interface MonobankInvoiceResponse {
   pageUrl?: string;
 }
 
+export interface MonobankInvoiceRemovalResponse {
+  invoiceId: string;
+  status: "cancelled";
+}
+
 export type SupportedCurrency = "UAH" | "USD";
 
 const CURRENCY_CODE: Record<SupportedCurrency, number> = {
@@ -184,12 +189,14 @@ export async function createInvoice({
   customerName,
   description,
   reference,
+  validitySeconds,
 }: {
   amountMinor: number;
   currency: SupportedCurrency;
   customerName: string;
   description: string;
   reference: string;
+  validitySeconds: number;
 }) {
   return requestMonobank<MonobankInvoiceResponse>({
     method: "POST",
@@ -197,6 +204,7 @@ export async function createInvoice({
     body: {
       amount: amountMinor,
       ccy: getCurrencyCode(currency),
+      validity: validitySeconds,
       merchantPaymInfo: {
         reference,
         destination: description,
@@ -204,6 +212,19 @@ export async function createInvoice({
       },
     },
   });
+}
+
+export async function removeInvoice(invoiceId: string) {
+  await requestMonobank<Record<string, never>>({
+    method: "POST",
+    path: "invoice/remove",
+    body: { invoiceId },
+  });
+
+  return {
+    invoiceId,
+    status: "cancelled",
+  } satisfies MonobankInvoiceRemovalResponse;
 }
 
 export async function fetchInvoiceStatus(invoiceId: string) {

@@ -16,6 +16,14 @@ bun run dev:vercel
 
 That serves the functions on `http://localhost:3001`.
 
+Apply database migrations:
+
+```bash
+bun run db:migrate
+```
+
+This uses the Supabase CLI `db push` flow, so run it from a linked Supabase project context or adapt it with the appropriate CLI flags for your environment.
+
 Required environment variables:
 
 - `MONOBANK_TOKEN`
@@ -38,7 +46,7 @@ The API surface lives under `api/monobank/*`:
 
 All `api/monobank/*` endpoints require the trusted internal API key plus forwarded admin identity headers from `lms-admin`.
 
-Run `supabase/schema.sql` for a fresh setup, or apply the SQL files in `supabase/migrations/` to update an existing database.
+Run `supabase/schema.sql` for a fresh setup, or use `bun run db:migrate` to apply the SQL files in `supabase/migrations/` to an existing database.
 
 Payment rows now use a normalized internal status enum and store the raw provider status separately.
 

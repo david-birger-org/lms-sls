@@ -7,6 +7,7 @@ export const PAYMENT_STATUSES = [
   "paid",
   "failed",
   "expired",
+  "cancelled",
   "reversed",
 ] as const;
 
@@ -21,6 +22,7 @@ const MONOBANK_STATUS_MAP = {
   refunded: "reversed",
   reversed: "reversed",
   success: "paid",
+  cancelled: "cancelled",
 } as const satisfies Record<string, PaymentStatus>;
 
 export function normalizeMonobankStatus(

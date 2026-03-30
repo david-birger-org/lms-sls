@@ -29,6 +29,7 @@ function createPaymentState(
   overrides: Partial<PaymentCreationState>,
 ): PaymentCreationState {
   return {
+    expiresAt: null,
     invoiceId: null,
     pageUrl: null,
     paymentId: "payment_123",
@@ -85,6 +86,7 @@ describe("POST /api/monobank/invoice", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
+      expiresAt: null,
       invoiceId: "invoice_existing",
       pageUrl: "https://mono/existing",
       paymentId: "payment_existing",
@@ -137,8 +139,10 @@ describe("POST /api/monobank/invoice", () => {
       customerName: "Ada Lovelace",
       description: "Expert matching",
       reference: "mb-payment_123",
+      validitySeconds: 86400,
     });
     expect(completePaymentCreationFn).toHaveBeenCalledWith({
+      expiresAt: expect.any(String),
       invoiceId: "invoice_123",
       pageUrl: "https://mono/pay/123",
       paymentId: "payment_123",

@@ -13,11 +13,27 @@ interface AppUserRow {
 
 interface PaymentDraftRow {
   id: string;
+  expires_at: string | null;
   invoice_id: string | null;
   page_url: string | null;
   reference: string;
   status: PaymentStatus;
   user_id: string;
+}
+
+interface PendingPaymentRow {
+  amount_minor: number;
+  created_at: string;
+  currency: SupportedCurrency;
+  customer_name: string;
+  description: string;
+  expires_at: string | null;
+  failure_reason: string | null;
+  invoice_id: string;
+  page_url: string | null;
+  provider_status: string | null;
+  reference: string;
+  status: PaymentStatus;
 }
 
 export interface CreatePaymentDraftInput {
@@ -37,6 +53,7 @@ function cleanNullableText(value?: string | null) {
 }
 
 export interface PaymentCreationState {
+  expiresAt: string | null;
   invoiceId: string | null;
   pageUrl: string | null;
   paymentId: string;
@@ -163,6 +180,7 @@ export async function createPaymentDraft(
       const existingPayments = await sql<PaymentDraftRow[]>`
         select
           id,
+          expires_at,
           invoice_id,
           page_url,
           reference,
@@ -178,6 +196,7 @@ export async function createPaymentDraft(
 
       if (existingPayment) {
         return {
+          expiresAt: existingPayment.expires_at,
           invoiceId: existingPayment.invoice_id,
           pageUrl: existingPayment.page_url,
           paymentId: existingPayment.id,
@@ -216,7 +235,7 @@ export async function createPaymentDraft(
         ${customerEmail},
         ${input.description}
       )
-      returning id, invoice_id, page_url, reference, status, user_id
+      returning id, expires_at, invoice_id, page_url, reference, status, user_id
     `;
 
     const payment = getRequiredRow(
@@ -225,6 +244,7 @@ export async function createPaymentDraft(
     );
 
     return {
+      expiresAt: payment.expires_at,
       invoiceId: payment.invoice_id,
       pageUrl: payment.page_url,
       paymentId: payment.id,
@@ -248,7 +268,7 @@ export async function reservePaymentForInvoiceCreation(paymentId: string) {
       updated_at = timezone('utc', now())
     where id = ${paymentId}
       and status in (${"draft"}, ${"creation_failed"})
-    returning id, invoice_id, page_url, reference, status, user_id
+    returning id, expires_at, invoice_id, page_url, reference, status, user_id
   `;
 
   const payment = paymentRows[0];
@@ -258,6 +278,7 @@ export async function reservePaymentForInvoiceCreation(paymentId: string) {
   }
 
   return {
+    expiresAt: payment.expires_at,
     invoiceId: payment.invoice_id,
     pageUrl: payment.page_url,
     paymentId: payment.id,
@@ -269,11 +290,13 @@ export async function reservePaymentForInvoiceCreation(paymentId: string) {
 }
 
 export async function completePaymentCreation({
+  expiresAt,
   invoiceId,
   pageUrl,
   paymentId,
   providerPayload,
 }: {
+  expiresAt?: string | null;
   invoiceId?: string | null;
   pageUrl?: string | null;
   paymentId: string;
@@ -286,6 +309,7 @@ export async function completePaymentCreation({
     set
       invoice_id = ${cleanNullableText(invoiceId)},
       page_url = ${cleanNullableText(pageUrl)},
+      expires_at = ${cleanNullableText(expiresAt)},
       status = ${"invoice_created"},
       failure_reason = null,
       provider_payload = ${toJsonbValue(providerPayload)}::jsonb,
@@ -313,6 +337,80 @@ export async function markPaymentCreationFailed({
       provider_payload = coalesce(${toJsonbValue(providerPayload)}::jsonb, provider_payload),
       updated_at = timezone('utc', now())
     where id = ${paymentId}
+  `;
+}
+
+export interface PendingInvoiceRecord {
+  amount: number;
+  createdDate: string;
+  currency: SupportedCurrency;
+  customerName: string;
+  description: string;
+  error?: string;
+  expiresAt?: string;
+  invoiceId: string;
+  pageUrl?: string;
+  reference: string;
+  status: PaymentStatus;
+}
+
+export async function listPendingInvoices(limit = 50) {
+  const database = getDatabase();
+
+  const rows = await database<PendingPaymentRow[]>`
+    select
+      amount_minor,
+      created_at,
+      currency,
+      customer_name,
+      description,
+      expires_at,
+      failure_reason,
+      invoice_id,
+      page_url,
+      provider_status,
+      reference,
+      status
+    from payments
+    where invoice_id is not null
+      and status in (${"invoice_created"}, ${"processing"})
+    order by created_at desc
+    limit ${limit}
+  `;
+
+  return rows.map((row) => ({
+    amount: row.amount_minor,
+    createdDate: row.created_at,
+    currency: row.currency,
+    customerName: row.customer_name,
+    description: row.description,
+    error: row.failure_reason ?? undefined,
+    expiresAt: row.expires_at ?? undefined,
+    invoiceId: row.invoice_id,
+    pageUrl: row.page_url ?? undefined,
+    reference: row.reference,
+    status: row.provider_status === "created" ? "invoice_created" : row.status,
+  })) satisfies PendingInvoiceRecord[];
+}
+
+export async function markInvoiceCancelled({
+  invoiceId,
+  providerPayload,
+}: {
+  invoiceId: string;
+  providerPayload?: unknown;
+}) {
+  const database = getDatabase();
+
+  await database`
+    update payments
+    set
+      provider_status = ${"cancelled"},
+      status = ${"cancelled"},
+      provider_payload = coalesce(${toJsonbValue(providerPayload)}::jsonb, provider_payload),
+      updated_at = timezone('utc', now())
+    where invoice_id = ${invoiceId}
+      and status in (${"invoice_created"}, ${"processing"})
   `;
 }
 
