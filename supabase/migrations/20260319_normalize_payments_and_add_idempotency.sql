@@ -25,7 +25,7 @@ alter table public.payments
 alter table public.payments
   alter column status type public.payment_status
   using (
-    case status
+    case status::text
       when 'pending_creation' then 'draft'::public.payment_status
       when 'created' then 'invoice_created'::public.payment_status
       when 'creation_failed' then 'creation_failed'::public.payment_status

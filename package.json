@@ -6,7 +6,7 @@
     "dev:vercel:listen": "vercel dev --listen 3001",
     "deploy": "bunx vercel deploy",
     "deploy:prod": "bunx vercel deploy --prod",
-    "db:migrate": "bunx supabase db push",
+    "db:migrate": "bunx supabase db push --db-url \"$DATABASE_URL\"",
     "lint": "biome check",
     "format": "biome format --write",
     "test": "bun test",
