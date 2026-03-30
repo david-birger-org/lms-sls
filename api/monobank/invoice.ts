@@ -22,6 +22,10 @@ function getInvoiceExpirationTimestamp(validitySeconds: number) {
   return new Date(Date.now() + validitySeconds * 1000).toISOString();
 }
 
+function getWebhookUrl(request: Request) {
+  return new URL("/api/monobank/webhook", request.url).toString();
+}
+
 interface CreateInvoiceRequestBody {
   appUserId?: unknown;
   amount?: unknown;
@@ -257,6 +261,7 @@ export function createPostHandler({
           description: input.description,
           reference: reservedPayment.reference,
           validitySeconds: input.validitySeconds,
+          webHookUrl: getWebhookUrl(request),
         });
       } catch (error) {
         const message = getErrorMessage(error);

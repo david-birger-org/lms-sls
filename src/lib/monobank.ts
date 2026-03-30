@@ -1,3 +1,5 @@
+import { createVerify } from "node:crypto";
+
 import { env } from "./env.js";
 
 export interface MonobankStatementItem {
@@ -62,6 +64,10 @@ export interface MonobankInvoiceResponse {
   pageUrl?: string;
 }
 
+interface MonobankPublicKeyResponse {
+  key?: string;
+}
+
 export interface MonobankInvoiceRemovalResponse {
   invoiceId: string;
   status: "cancelled";
@@ -120,6 +126,8 @@ async function requestMonobank<T>({
 
   return (await monobankResponse.json()) as T;
 }
+
+let cachedMonobankPublicKey: string | null = null;
 
 export function toMinorUnits(amount: number) {
   return Math.round(amount * 100);
@@ -189,6 +197,7 @@ export async function createInvoice({
   customerName,
   description,
   reference,
+  webHookUrl,
   validitySeconds,
 }: {
   amountMinor: number;
@@ -196,6 +205,7 @@ export async function createInvoice({
   customerName: string;
   description: string;
   reference: string;
+  webHookUrl?: string;
   validitySeconds: number;
 }) {
   return requestMonobank<MonobankInvoiceResponse>({
@@ -210,6 +220,7 @@ export async function createInvoice({
         destination: description,
         comment: `${customerName}: ${description}`,
       },
+      webHookUrl,
     },
   });
 }
@@ -233,4 +244,47 @@ export async function fetchInvoiceStatus(invoiceId: string) {
     path: "invoice/status",
     searchParams: { invoiceId },
   });
+}
+
+export async function getMonobankPublicKey({
+  forceRefresh = false,
+}: {
+  forceRefresh?: boolean;
+} = {}) {
+  if (!forceRefresh && cachedMonobankPublicKey) {
+    return cachedMonobankPublicKey;
+  }
+
+  const response = await requestMonobank<MonobankPublicKeyResponse>({
+    method: "GET",
+    path: "pubkey",
+  });
+  const publicKey = response.key?.trim();
+
+  if (!publicKey) {
+    throw new Error("Monobank public key response did not include a key.");
+  }
+
+  cachedMonobankPublicKey = publicKey;
+
+  return publicKey;
+}
+
+export function verifyMonobankWebhookSignature({
+  body,
+  publicKey,
+  signature,
+}: {
+  body: string;
+  publicKey: string;
+  signature: string;
+}) {
+  const verifier = createVerify("SHA256");
+  verifier.update(body);
+  verifier.end();
+
+  return verifier.verify(
+    Buffer.from(publicKey, "base64"),
+    Buffer.from(signature, "base64"),
+  );
 }

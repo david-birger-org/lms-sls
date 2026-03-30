@@ -140,6 +140,7 @@ describe("POST /api/monobank/invoice", () => {
       description: "Expert matching",
       reference: "mb-payment_123",
       validitySeconds: 86400,
+      webHookUrl: "https://example.com/api/monobank/webhook",
     });
     expect(completePaymentCreationFn).toHaveBeenCalledWith({
       expiresAt: expect.any(String),

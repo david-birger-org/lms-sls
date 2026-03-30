@@ -36,6 +36,10 @@ interface PendingPaymentRow {
   status: PaymentStatus;
 }
 
+interface PaymentProviderStateRow {
+  provider_modified_at: string | null;
+}
+
 export interface CreatePaymentDraftInput {
   appUserId?: string | null;
   amountMinor: number;
@@ -50,6 +54,22 @@ export interface CreatePaymentDraftInput {
 function cleanNullableText(value?: string | null) {
   const trimmedValue = value?.trim();
   return trimmedValue ? trimmedValue : null;
+}
+
+function normalizeProviderTimestamp(value?: string | null) {
+  const normalizedValue = cleanNullableText(value);
+
+  if (!normalizedValue) {
+    return null;
+  }
+
+  const timestamp = new Date(normalizedValue);
+
+  if (Number.isNaN(timestamp.getTime())) {
+    return null;
+  }
+
+  return timestamp.toISOString();
 }
 
 export interface PaymentCreationState {
@@ -418,22 +438,45 @@ export async function syncMonobankPaymentStatus(
   invoiceStatus: MonobankInvoiceStatusResponse,
 ) {
   const invoiceId = cleanNullableText(invoiceStatus.invoiceId);
+  const reference = cleanNullableText(invoiceStatus.reference);
+  const hasReference = reference !== null;
 
-  if (!invoiceId) {
+  if (!invoiceId && !hasReference) {
     return;
   }
 
   const database = getDatabase();
-  const reference = cleanNullableText(invoiceStatus.reference);
-  const hasReference = reference !== null;
   const providerStatus = cleanNullableText(invoiceStatus.status);
   const normalizedStatus = normalizeMonobankStatus(providerStatus);
+  const providerModifiedAt = normalizeProviderTimestamp(
+    invoiceStatus.modifiedDate,
+  );
+  const existingProviderStateRows = await database<PaymentProviderStateRow[]>`
+    select provider_modified_at
+    from payments
+    where invoice_id = ${invoiceId}
+      or (${hasReference} and reference = ${reference})
+    order by provider_modified_at desc nulls last, updated_at desc, created_at desc
+    limit 1
+  `;
+  const existingProviderModifiedAt = normalizeProviderTimestamp(
+    existingProviderStateRows[0]?.provider_modified_at,
+  );
+
+  if (
+    providerModifiedAt &&
+    existingProviderModifiedAt &&
+    providerModifiedAt < existingProviderModifiedAt
+  ) {
+    return;
+  }
 
   await database`
     update payments
     set
       invoice_id = coalesce(payments.invoice_id, ${invoiceId}),
       provider_status = coalesce(${providerStatus}, payments.provider_status),
+      provider_modified_at = coalesce(${providerModifiedAt}, payments.provider_modified_at),
       status = coalesce(${normalizedStatus}, payments.status),
       failure_reason = coalesce(
         ${cleanNullableText(invoiceStatus.failureReason)},
