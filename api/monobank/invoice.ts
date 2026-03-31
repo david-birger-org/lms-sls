@@ -291,14 +291,16 @@ export function createPostHandler({
       }
 
       const expiresAt = getInvoiceExpirationTimestamp(input.validitySeconds);
+      const completedPaymentId = paymentId;
 
       await completePaymentCreationFn({
         expiresAt,
         invoiceId: invoice.invoiceId,
         pageUrl: invoice.pageUrl,
-        paymentId,
+        paymentId: completedPaymentId,
         providerPayload: invoice,
       });
+      paymentId = null;
 
       const qrCodeDataUrl =
         input.output === "qr"
@@ -312,7 +314,7 @@ export function createPostHandler({
         expiresAt,
         invoiceId: invoice.invoiceId,
         pageUrl: invoice.pageUrl,
-        paymentId,
+        paymentId: completedPaymentId,
         qrCodeDataUrl,
       });
     } catch (error) {

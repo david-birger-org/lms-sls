@@ -193,4 +193,50 @@ describe("POST /api/monobank/invoice", () => {
     });
     expect(createInvoiceFn).not.toHaveBeenCalled();
   });
+
+  it("does not mark the payment as creation_failed after the invoice was persisted", async () => {
+    const completePaymentCreationFn = mock(async () => undefined);
+    const markPaymentCreationFailedFn = mock(async () => undefined);
+    const createInvoiceFn = mock(async () => ({
+      invoiceId: "invoice_123",
+      pageUrl: "https://mono/pay/123",
+    }));
+    const handler = createPostHandler({
+      completePaymentCreationFn,
+      createInvoiceFn,
+      createPaymentDraftFn: async () => createPaymentState({}),
+      markPaymentCreationFailedFn,
+      qrcodeToDataUrl: mock(async () => {
+        throw new Error("QR generation failed");
+      }),
+      requireTrustedInternalAdminFn: async () => ({
+        admin: {
+          email: "person@example.com",
+          name: "Ada Lovelace",
+          role: "admin",
+          userId: "user_123",
+        },
+        ok: true,
+      }),
+      reservePaymentForInvoiceCreationFn: async () =>
+        createReservedPaymentState(),
+    });
+
+    const response = await handler(
+      createRequest({ body: { ...baseRequestBody, output: "qr" } }),
+    );
+
+    expect(response.status).toBe(500);
+    expect(completePaymentCreationFn).toHaveBeenCalledWith({
+      expiresAt: expect.any(String),
+      invoiceId: "invoice_123",
+      pageUrl: "https://mono/pay/123",
+      paymentId: "payment_123",
+      providerPayload: {
+        invoiceId: "invoice_123",
+        pageUrl: "https://mono/pay/123",
+      },
+    });
+    expect(markPaymentCreationFailedFn).not.toHaveBeenCalled();
+  });
 });

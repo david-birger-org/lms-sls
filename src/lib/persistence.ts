@@ -3,7 +3,13 @@ import type {
   MonobankInvoiceStatusResponse,
   SupportedCurrency,
 } from "./monobank.js";
-import { normalizeMonobankStatus, type PaymentStatus } from "./payments.js";
+import {
+  normalizeMonobankStatus,
+  type PaymentStatus,
+  PENDING_MONOBANK_PROVIDER_STATUSES,
+  PENDING_PAYMENT_STATUSES,
+  resolveMonobankPaymentStatus,
+} from "./payments.js";
 
 interface AppUserRow {
   auth_user_id: string;
@@ -71,6 +77,17 @@ function normalizeProviderTimestamp(value?: string | null) {
 
   return timestamp.toISOString();
 }
+
+const [pendingInvoiceCreatedStatus, pendingProcessingStatus] =
+  PENDING_PAYMENT_STATUSES;
+const [
+  pendingProviderCreatedStatus,
+  pendingProviderProcessingStatus,
+  pendingProviderHoldStatus,
+] = PENDING_MONOBANK_PROVIDER_STATUSES;
+const createFlowDraftStatus = "draft";
+const createFlowCreatingInvoiceStatus = "creating_invoice";
+const createFlowCreationFailedStatus = "creation_failed";
 
 export interface PaymentCreationState {
   expiresAt: string | null;
@@ -327,12 +344,27 @@ export async function completePaymentCreation({
   await database`
     update payments
     set
-      invoice_id = ${cleanNullableText(invoiceId)},
-      page_url = ${cleanNullableText(pageUrl)},
-      expires_at = ${cleanNullableText(expiresAt)},
-      status = ${"invoice_created"},
-      failure_reason = null,
-      provider_payload = ${toJsonbValue(providerPayload)}::jsonb,
+      invoice_id = coalesce(payments.invoice_id, ${cleanNullableText(invoiceId)}),
+      page_url = coalesce(payments.page_url, ${cleanNullableText(pageUrl)}),
+      expires_at = coalesce(payments.expires_at, ${cleanNullableText(expiresAt)}),
+      provider_status = coalesce(payments.provider_status, ${pendingProviderCreatedStatus}),
+      status = case
+        when payments.status in (
+          ${createFlowDraftStatus},
+          ${createFlowCreatingInvoiceStatus},
+          ${createFlowCreationFailedStatus}
+        ) then ${pendingInvoiceCreatedStatus}
+        else payments.status
+      end,
+      failure_reason = case
+        when payments.status in (
+          ${createFlowDraftStatus},
+          ${createFlowCreatingInvoiceStatus},
+          ${createFlowCreationFailedStatus}
+        ) then null
+        else payments.failure_reason
+      end,
+      provider_payload = coalesce(payments.provider_payload, ${toJsonbValue(providerPayload)}::jsonb),
       updated_at = timezone('utc', now())
     where id = ${paymentId}
   `;
@@ -352,8 +384,22 @@ export async function markPaymentCreationFailed({
   await database`
     update payments
     set
-      status = ${"creation_failed"},
-      failure_reason = ${cleanNullableText(errorMessage) ?? errorMessage},
+      status = case
+        when payments.invoice_id is null and payments.status in (
+          ${createFlowDraftStatus},
+          ${createFlowCreatingInvoiceStatus},
+          ${createFlowCreationFailedStatus}
+        ) then ${createFlowCreationFailedStatus}
+        else payments.status
+      end,
+      failure_reason = case
+        when payments.invoice_id is null and payments.status in (
+          ${createFlowDraftStatus},
+          ${createFlowCreatingInvoiceStatus},
+          ${createFlowCreationFailedStatus}
+        ) then ${cleanNullableText(errorMessage) ?? errorMessage}
+        else payments.failure_reason
+      end,
       provider_payload = coalesce(${toJsonbValue(providerPayload)}::jsonb, provider_payload),
       updated_at = timezone('utc', now())
     where id = ${paymentId}
@@ -393,7 +439,14 @@ export async function listPendingInvoices(limit = 50) {
       status
     from payments
     where invoice_id is not null
-      and status in (${"invoice_created"}, ${"processing"})
+      and (
+        status in (${pendingInvoiceCreatedStatus}, ${pendingProcessingStatus})
+        or provider_status in (
+          ${pendingProviderCreatedStatus},
+          ${pendingProviderProcessingStatus},
+          ${pendingProviderHoldStatus}
+        )
+      )
     order by created_at desc
     limit ${limit}
   `;
@@ -409,7 +462,9 @@ export async function listPendingInvoices(limit = 50) {
     invoiceId: row.invoice_id,
     pageUrl: row.page_url ?? undefined,
     reference: row.reference,
-    status: row.provider_status === "created" ? "invoice_created" : row.status,
+    status:
+      resolveMonobankPaymentStatus(row.status, row.provider_status) ??
+      row.status,
   })) satisfies PendingInvoiceRecord[];
 }
 
@@ -430,7 +485,14 @@ export async function markInvoiceCancelled({
       provider_payload = coalesce(${toJsonbValue(providerPayload)}::jsonb, provider_payload),
       updated_at = timezone('utc', now())
     where invoice_id = ${invoiceId}
-      and status in (${"invoice_created"}, ${"processing"})
+      and (
+        status in (${pendingInvoiceCreatedStatus}, ${pendingProcessingStatus})
+        or provider_status in (
+          ${pendingProviderCreatedStatus},
+          ${pendingProviderProcessingStatus},
+          ${pendingProviderHoldStatus}
+        )
+      )
   `;
 }
 
