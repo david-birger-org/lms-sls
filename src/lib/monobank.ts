@@ -46,8 +46,8 @@ export interface MonobankCancelItem {
 export interface MonobankInvoiceStatusResponse {
   invoiceId?: string;
   status?: string;
-  failureReason?: string;
-  errCode?: string;
+  failureReason?: number | string;
+  errCode?: number | string;
   amount?: number;
   ccy?: number;
   finalAmount?: number;

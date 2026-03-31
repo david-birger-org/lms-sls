@@ -28,7 +28,7 @@ interface PaymentDraftRow {
 }
 
 interface PendingPaymentRow {
-  amount_minor: number;
+  amount_minor: number | string;
   created_at: string;
   currency: SupportedCurrency;
   customer_name: string;
@@ -57,9 +57,25 @@ export interface CreatePaymentDraftInput {
   idempotencyKey?: string | null;
 }
 
-function cleanNullableText(value?: string | null) {
-  const trimmedValue = value?.trim();
-  return trimmedValue ? trimmedValue : null;
+export function cleanNullableText(value?: unknown) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    const trimmedValue = value.trim();
+    return trimmedValue ? trimmedValue : null;
+  }
+
+  if (
+    typeof value === "number" ||
+    typeof value === "bigint" ||
+    typeof value === "boolean"
+  ) {
+    return String(value);
+  }
+
+  return null;
 }
 
 function normalizeProviderTimestamp(value?: string | null) {
@@ -78,6 +94,33 @@ function normalizeProviderTimestamp(value?: string | null) {
   return timestamp.toISOString();
 }
 
+function normalizeMinorAmount(value: number | string) {
+  if (typeof value === "number") {
+    return value;
+  }
+
+  const parsedValue = Number(value);
+  return Number.isFinite(parsedValue) ? parsedValue : 0;
+}
+
+function toPendingInvoiceRecord(row: PendingPaymentRow): PendingInvoiceRecord {
+  return {
+    amount: normalizeMinorAmount(row.amount_minor),
+    createdDate: row.created_at,
+    currency: row.currency,
+    customerName: row.customer_name,
+    description: row.description,
+    error: row.failure_reason ?? undefined,
+    expiresAt: row.expires_at ?? undefined,
+    invoiceId: row.invoice_id,
+    pageUrl: row.page_url ?? undefined,
+    reference: row.reference,
+    status:
+      resolveMonobankPaymentStatus(row.status, row.provider_status) ??
+      row.status,
+  };
+}
+
 const [pendingInvoiceCreatedStatus, pendingProcessingStatus] =
   PENDING_PAYMENT_STATUSES;
 const [
@@ -85,9 +128,15 @@ const [
   pendingProviderProcessingStatus,
   pendingProviderHoldStatus,
 ] = PENDING_MONOBANK_PROVIDER_STATUSES;
-const createFlowDraftStatus = "draft";
-const createFlowCreatingInvoiceStatus = "creating_invoice";
-const createFlowCreationFailedStatus = "creation_failed";
+const [
+  createFlowDraftStatus,
+  createFlowCreatingInvoiceStatus,
+  createFlowCreationFailedStatus,
+] = [
+  "draft",
+  "creating_invoice",
+  "creation_failed",
+] as const satisfies readonly PaymentStatus[];
 
 export interface PaymentCreationState {
   expiresAt: string | null;
@@ -451,21 +500,7 @@ export async function listPendingInvoices(limit = 50) {
     limit ${limit}
   `;
 
-  return rows.map((row) => ({
-    amount: row.amount_minor,
-    createdDate: row.created_at,
-    currency: row.currency,
-    customerName: row.customer_name,
-    description: row.description,
-    error: row.failure_reason ?? undefined,
-    expiresAt: row.expires_at ?? undefined,
-    invoiceId: row.invoice_id,
-    pageUrl: row.page_url ?? undefined,
-    reference: row.reference,
-    status:
-      resolveMonobankPaymentStatus(row.status, row.provider_status) ??
-      row.status,
-  })) satisfies PendingInvoiceRecord[];
+  return rows.map(toPendingInvoiceRecord);
 }
 
 export async function markInvoiceCancelled({
