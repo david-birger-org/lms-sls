@@ -1,51 +1,41 @@
 import QRCode from "qrcode";
+
 import { getErrorMessage } from "../../src/lib/errors.js";
 import { requireTrustedInternalAdmin } from "../../src/lib/internal-auth.js";
+import {
+  createPendingInvoice,
+  ensureAppUser,
+  markInvoiceCreationFailed,
+  storeCreatedInvoice,
+} from "../../src/lib/invoice-store.js";
 import {
   createInvoice,
   type MonobankInvoiceResponse,
   type SupportedCurrency,
   toMinorUnits,
 } from "../../src/lib/monobank.js";
-import {
-  completePaymentCreation,
-  createPaymentDraft,
-  markPaymentCreationFailed,
-  reservePaymentForInvoiceCreation,
-} from "../../src/lib/persistence.js";
 import { json } from "../../src/lib/response.js";
 
 type OutputMode = "link" | "qr";
+
 const DEFAULT_INVOICE_VALIDITY_SECONDS = 24 * 60 * 60;
 
-function getInvoiceExpirationTimestamp(validitySeconds: number) {
-  return new Date(Date.now() + validitySeconds * 1000).toISOString();
-}
-
-function getWebhookUrl(request: Request) {
-  return new URL("/api/monobank/webhook", request.url).toString();
-}
-
 interface CreateInvoiceRequestBody {
-  appUserId?: unknown;
   amount?: unknown;
   currency?: unknown;
   customerEmail?: unknown;
   customerName?: unknown;
   description?: unknown;
-  idempotencyKey?: unknown;
   output?: unknown;
   validitySeconds?: unknown;
 }
 
 interface ParsedCreateInvoiceInput {
-  appUserId?: string;
   amountMinor: number;
   currency: SupportedCurrency;
   customerEmail?: string;
   customerName: string;
   description: string;
-  idempotencyKey?: string;
   output: OutputMode;
   validitySeconds: number;
 }
@@ -58,6 +48,14 @@ function getTrimmedString(value: unknown) {
   return typeof value === "string" ? value.trim() || null : null;
 }
 
+function getInvoiceExpirationTimestamp(validitySeconds: number) {
+  return new Date(Date.now() + validitySeconds * 1000).toISOString();
+}
+
+function getWebhookUrl(request: Request) {
+  return new URL("/api/monobank/webhook", request.url).toString();
+}
+
 function parseCreateInvoiceInput(
   body: unknown,
 ): ParsedCreateInvoiceInput | Response {
@@ -66,23 +64,18 @@ function parseCreateInvoiceInput(
   }
 
   const {
-    appUserId,
     amount,
     currency,
     customerEmail,
     customerName,
     description,
-    idempotencyKey,
     output,
     validitySeconds,
   } = body as CreateInvoiceRequestBody;
   const normalizedAmount = typeof amount === "number" ? amount : Number(amount);
-  const normalizedAppUserId = getTrimmedString(appUserId) ?? undefined;
   const normalizedCustomerEmail = getTrimmedString(customerEmail) ?? undefined;
   const normalizedCustomerName = getTrimmedString(customerName);
   const normalizedDescription = getTrimmedString(description);
-  const normalizedIdempotencyKey =
-    getTrimmedString(idempotencyKey) ?? undefined;
   const normalizedValiditySeconds =
     validitySeconds === undefined
       ? DEFAULT_INVOICE_VALIDITY_SECONDS
@@ -116,24 +109,14 @@ function parseCreateInvoiceInput(
   }
 
   return {
-    appUserId: normalizedAppUserId,
     amountMinor: toMinorUnits(normalizedAmount),
     currency,
     customerEmail: normalizedCustomerEmail,
     customerName: normalizedCustomerName,
     description: normalizedDescription,
-    idempotencyKey: normalizedIdempotencyKey,
     output,
     validitySeconds: normalizedValiditySeconds,
   };
-}
-
-function getIdempotencyKey(request: Request, bodyIdempotencyKey?: string) {
-  return (
-    request.headers.get("idempotency-key")?.trim() ||
-    bodyIdempotencyKey ||
-    undefined
-  );
 }
 
 function buildInvoiceResponse({
@@ -143,37 +126,58 @@ function buildInvoiceResponse({
   paymentId,
   qrCodeDataUrl,
 }: {
-  expiresAt?: string | null;
-  invoiceId?: string | null;
+  expiresAt: string;
+  invoiceId: string;
   pageUrl: string;
   paymentId: string;
   qrCodeDataUrl?: string;
 }) {
   return json({
     expiresAt,
-    paymentId,
     invoiceId,
     pageUrl,
+    paymentId,
     qrCodeDataUrl,
   });
 }
 
+async function persistInvoiceFailure(
+  paymentId: string | null,
+  errorMessage: string,
+  providerPayload: unknown,
+  markInvoiceCreationFailedFn: typeof markInvoiceCreationFailed,
+) {
+  if (!paymentId) {
+    return;
+  }
+
+  try {
+    await markInvoiceCreationFailedFn({
+      errorMessage,
+      paymentId,
+      providerPayload,
+    });
+  } catch {
+    // Ignore follow-up persistence failures and return the primary API error.
+  }
+}
+
 export function createPostHandler({
-  completePaymentCreationFn = completePaymentCreation,
   createInvoiceFn = createInvoice,
-  createPaymentDraftFn = createPaymentDraft,
-  markPaymentCreationFailedFn = markPaymentCreationFailed,
+  createPendingInvoiceFn = createPendingInvoice,
+  ensureAppUserFn = ensureAppUser,
+  markInvoiceCreationFailedFn = markInvoiceCreationFailed,
   qrcodeToDataUrl = QRCode.toDataURL,
   requireTrustedInternalAdminFn = requireTrustedInternalAdmin,
-  reservePaymentForInvoiceCreationFn = reservePaymentForInvoiceCreation,
+  storeCreatedInvoiceFn = storeCreatedInvoice,
 }: {
-  completePaymentCreationFn?: typeof completePaymentCreation;
   createInvoiceFn?: typeof createInvoice;
-  createPaymentDraftFn?: typeof createPaymentDraft;
-  markPaymentCreationFailedFn?: typeof markPaymentCreationFailed;
+  createPendingInvoiceFn?: typeof createPendingInvoice;
+  ensureAppUserFn?: typeof ensureAppUser;
+  markInvoiceCreationFailedFn?: typeof markInvoiceCreationFailed;
   qrcodeToDataUrl?: typeof QRCode.toDataURL;
   requireTrustedInternalAdminFn?: typeof requireTrustedInternalAdmin;
-  reservePaymentForInvoiceCreationFn?: typeof reservePaymentForInvoiceCreation;
+  storeCreatedInvoiceFn?: typeof storeCreatedInvoice;
 } = {}) {
   return async function POST(request: Request) {
     const access = await requireTrustedInternalAdminFn(request);
@@ -199,112 +203,81 @@ export function createPostHandler({
         return parsedInput;
       }
 
-      const input = {
-        ...parsedInput,
+      const customerEmail = parsedInput.customerEmail ?? access.admin.email;
+      const userId = await ensureAppUserFn({
         authUserId: access.admin.userId,
-        customerEmail:
-          parsedInput.customerEmail ?? access.admin.email ?? undefined,
-        idempotencyKey: getIdempotencyKey(request, parsedInput.idempotencyKey),
-      };
-
-      const paymentDraft = await createPaymentDraftFn({
-        appUserId: input.appUserId,
-        amountMinor: input.amountMinor,
-        authUserId: input.authUserId,
-        currency: input.currency,
-        customerEmail: input.customerEmail,
-        customerName: input.customerName,
-        description: input.description,
-        idempotencyKey: input.idempotencyKey,
+        email: customerEmail,
+        fullName: parsedInput.customerName,
       });
-      paymentId = paymentDraft.paymentId;
+      const pendingInvoice = await createPendingInvoiceFn({
+        amountMinor: parsedInput.amountMinor,
+        currency: parsedInput.currency,
+        customerEmail,
+        customerName: parsedInput.customerName,
+        description: parsedInput.description,
+        userId,
+      });
 
-      if (paymentDraft.pageUrl) {
-        const qrCodeDataUrl =
-          input.output === "qr"
-            ? await qrcodeToDataUrl(paymentDraft.pageUrl, {
-                width: 320,
-                margin: 1,
-              })
-            : undefined;
-
-        return buildInvoiceResponse({
-          expiresAt: paymentDraft.expiresAt,
-          invoiceId: paymentDraft.invoiceId,
-          pageUrl: paymentDraft.pageUrl,
-          paymentId,
-          qrCodeDataUrl,
-        });
-      }
-
-      const reservedPayment =
-        await reservePaymentForInvoiceCreationFn(paymentId);
-
-      if (!reservedPayment) {
-        return json(
-          {
-            error:
-              "A request with this idempotency key is already creating an invoice. Retry shortly.",
-            paymentId,
-          },
-          { status: 409 },
-        );
-      }
+      paymentId = pendingInvoice.paymentId;
 
       let invoice: MonobankInvoiceResponse;
 
       try {
         invoice = await createInvoiceFn({
-          amountMinor: input.amountMinor,
-          currency: input.currency,
-          customerName: input.customerName,
-          description: input.description,
-          reference: reservedPayment.reference,
-          validitySeconds: input.validitySeconds,
+          amountMinor: parsedInput.amountMinor,
+          currency: parsedInput.currency,
+          customerName: parsedInput.customerName,
+          description: parsedInput.description,
+          reference: pendingInvoice.reference,
+          validitySeconds: parsedInput.validitySeconds,
           webHookUrl: getWebhookUrl(request),
         });
       } catch (error) {
         const message = getErrorMessage(error);
 
-        await persistPaymentFailure(
+        await persistInvoiceFailure(
           paymentId,
           message,
           undefined,
-          markPaymentCreationFailedFn,
+          markInvoiceCreationFailedFn,
         );
 
         return json({ error: message }, { status: 502 });
       }
 
-      if (!invoice.pageUrl) {
-        await persistPaymentFailure(
+      const invoiceId = invoice.invoiceId?.trim();
+      const pageUrl = invoice.pageUrl?.trim();
+
+      if (!invoiceId || !pageUrl) {
+        const message =
+          "Monobank response did not include invoiceId or pageUrl.";
+
+        await persistInvoiceFailure(
           paymentId,
-          "Monobank response did not include pageUrl.",
+          message,
           invoice,
-          markPaymentCreationFailedFn,
+          markInvoiceCreationFailedFn,
         );
 
-        return json(
-          { error: "Monobank response did not include pageUrl." },
-          { status: 502 },
-        );
+        return json({ error: message }, { status: 502 });
       }
 
-      const expiresAt = getInvoiceExpirationTimestamp(input.validitySeconds);
-      const completedPaymentId = paymentId;
+      const expiresAt = getInvoiceExpirationTimestamp(
+        parsedInput.validitySeconds,
+      );
 
-      await completePaymentCreationFn({
+      await storeCreatedInvoiceFn({
         expiresAt,
-        invoiceId: invoice.invoiceId,
-        pageUrl: invoice.pageUrl,
-        paymentId: completedPaymentId,
+        invoiceId,
+        pageUrl,
+        paymentId,
         providerPayload: invoice,
       });
       paymentId = null;
 
       const qrCodeDataUrl =
-        input.output === "qr"
-          ? await qrcodeToDataUrl(invoice.pageUrl, {
+        parsedInput.output === "qr"
+          ? await qrcodeToDataUrl(pageUrl, {
               width: 320,
               margin: 1,
             })
@@ -312,19 +285,19 @@ export function createPostHandler({
 
       return buildInvoiceResponse({
         expiresAt,
-        invoiceId: invoice.invoiceId,
-        pageUrl: invoice.pageUrl,
-        paymentId: completedPaymentId,
+        invoiceId,
+        pageUrl,
+        paymentId: pendingInvoice.paymentId,
         qrCodeDataUrl,
       });
     } catch (error) {
       const message = getErrorMessage(error);
 
-      await persistPaymentFailure(
+      await persistInvoiceFailure(
         paymentId,
         message,
         undefined,
-        markPaymentCreationFailedFn,
+        markInvoiceCreationFailedFn,
       );
 
       return json(
@@ -333,27 +306,6 @@ export function createPostHandler({
       );
     }
   };
-}
-
-async function persistPaymentFailure(
-  paymentId: string | null,
-  errorMessage: string,
-  providerPayload?: unknown,
-  markPaymentCreationFailedFn: typeof markPaymentCreationFailed = markPaymentCreationFailed,
-) {
-  if (!paymentId) {
-    return;
-  }
-
-  try {
-    await markPaymentCreationFailedFn({
-      errorMessage,
-      paymentId,
-      providerPayload,
-    });
-  } catch {
-    // Ignore persistence follow-up failures and return the primary API error.
-  }
 }
 
 export const POST = createPostHandler();

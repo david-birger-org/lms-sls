@@ -1,13 +1,13 @@
 import { getErrorMessage } from "../../../src/lib/errors.js";
 import { requireTrustedInternalAdmin } from "../../../src/lib/internal-auth.js";
 import {
+  markInvoiceCancelled,
+  syncMonobankPaymentStatus,
+} from "../../../src/lib/invoice-store.js";
+import {
   fetchInvoiceStatus,
   removeInvoice,
 } from "../../../src/lib/monobank.js";
-import {
-  markInvoiceCancelled,
-  syncMonobankPaymentStatus,
-} from "../../../src/lib/persistence.js";
 import { json } from "../../../src/lib/response.js";
 
 interface RemoveInvoiceRequestBody {

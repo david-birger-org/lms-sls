@@ -27,10 +27,10 @@ This uses the Supabase CLI `db push` flow, so run it from a linked Supabase proj
 Required environment variables:
 
 - `MONOBANK_TOKEN`
-- `DATABASE_URL` (Supabase transaction pooler connection string)
+- `DATABASE_URL` (Supabase transaction pooler connection string, port `6543`)
 - `INTERNAL_API_KEY`
 
-Database access uses Bun's native `SQL` client with `prepare: false` so it works with Supabase's transaction pooler.
+Database access uses Bun's native `SQL` client with `prepare: false` and a small connection pool per instance so it works with Supabase's transaction pooler. Do not use the session pooler URL (`port 5432`) for `lms-sls`.
 
 ## Deploy
 

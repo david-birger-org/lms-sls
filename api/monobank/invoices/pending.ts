@@ -1,6 +1,6 @@
 import { getErrorMessage } from "../../../src/lib/errors.js";
 import { requireTrustedInternalAdmin } from "../../../src/lib/internal-auth.js";
-import { listPendingInvoices } from "../../../src/lib/persistence.js";
+import { listPendingInvoices } from "../../../src/lib/invoice-store.js";
 import { json } from "../../../src/lib/response.js";
 
 export async function GET(request: Request) {

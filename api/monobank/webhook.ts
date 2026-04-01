@@ -1,10 +1,10 @@
 import { getErrorMessage } from "../../src/lib/errors.js";
+import { syncMonobankPaymentStatus } from "../../src/lib/invoice-store.js";
 import {
   getMonobankPublicKey,
   type MonobankInvoiceStatusResponse,
   verifyMonobankWebhookSignature,
 } from "../../src/lib/monobank.js";
-import { syncMonobankPaymentStatus } from "../../src/lib/persistence.js";
 import { json } from "../../src/lib/response.js";
 
 function getWebhookSignature(request: Request) {

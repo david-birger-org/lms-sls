@@ -1,7 +1,7 @@
 import { getErrorMessage } from "../../../src/lib/errors.js";
 import { requireTrustedInternalAdmin } from "../../../src/lib/internal-auth.js";
+import { syncMonobankPaymentStatus } from "../../../src/lib/invoice-store.js";
 import { fetchInvoiceStatus } from "../../../src/lib/monobank.js";
-import { syncMonobankPaymentStatus } from "../../../src/lib/persistence.js";
 import { json } from "../../../src/lib/response.js";
 
 export async function GET(request: Request) {

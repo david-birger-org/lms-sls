@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import type { PaymentCreationState } from "../../src/lib/persistence.js";
+
 import { createPostHandler } from "./invoice.js";
 
 const baseRequestBody = {
@@ -25,114 +25,55 @@ function createRequest(init?: {
   });
 }
 
-function createPaymentState(
-  overrides: Partial<PaymentCreationState>,
-): PaymentCreationState {
+function createAdminAccess() {
   return {
-    expiresAt: null,
-    invoiceId: null,
-    pageUrl: null,
-    paymentId: "payment_123",
-    reference: "mb-payment_123",
-    reused: false,
-    status: "draft",
-    userId: "app_user_1",
-    ...overrides,
-  };
-}
-
-function createReservedPaymentState() {
-  return {
-    ...createPaymentState({ reused: true, status: "creating_invoice" }),
-    reused: true as const,
+    admin: {
+      email: "person@example.com",
+      name: "Ada Lovelace",
+      role: "admin" as const,
+      userId: "user_123",
+    },
+    ok: true as const,
   };
 }
 
 describe("POST /api/monobank/invoice", () => {
-  it("returns an existing invoice for the same idempotency key", async () => {
-    const createInvoiceFn = mock(async () => ({
-      invoiceId: "invoice_new",
-      pageUrl: "https://mono/new",
+  it("creates a Monobank invoice and persists it", async () => {
+    const ensureAppUserFn = mock(async () => "app_user_1");
+    const createPendingInvoiceFn = mock(async () => ({
+      paymentId: "payment_123",
+      reference: "mb-payment_123",
     }));
-    const handler = createPostHandler({
-      completePaymentCreationFn: async () => undefined,
-      createInvoiceFn,
-      createPaymentDraftFn: async () => ({
-        ...createPaymentState({
-          invoiceId: "invoice_existing",
-          pageUrl: "https://mono/existing",
-          paymentId: "payment_existing",
-          reference: "mb-existing",
-          reused: true,
-          status: "invoice_created",
-        }),
-      }),
-      markPaymentCreationFailedFn: async () => undefined,
-      requireTrustedInternalAdminFn: async () => ({
-        admin: {
-          email: "person@example.com",
-          name: "Ada Lovelace",
-          role: "admin",
-          userId: "user_123",
-        },
-        ok: true,
-      }),
-      reservePaymentForInvoiceCreationFn: async () => null,
-    });
-
-    const response = await handler(
-      createRequest({ headers: { "idempotency-key": "idem-123" } }),
-    );
-
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      expiresAt: null,
-      invoiceId: "invoice_existing",
-      pageUrl: "https://mono/existing",
-      paymentId: "payment_existing",
-      qrCodeDataUrl: undefined,
-    });
-    expect(createInvoiceFn).not.toHaveBeenCalled();
-  });
-
-  it("creates an invoice once and persists the result", async () => {
-    const completePaymentCreationFn = mock(async () => undefined);
     const createInvoiceFn = mock(async () => ({
       invoiceId: "invoice_123",
       pageUrl: "https://mono/pay/123",
     }));
-    const createPaymentDraftFn = mock(async () => createPaymentState({}));
-    const reservePaymentForInvoiceCreationFn = mock(async () =>
-      createReservedPaymentState(),
-    );
+    const storeCreatedInvoiceFn = mock(async () => undefined);
     const handler = createPostHandler({
-      completePaymentCreationFn,
       createInvoiceFn,
-      createPaymentDraftFn,
-      markPaymentCreationFailedFn: async () => undefined,
-      requireTrustedInternalAdminFn: async () => ({
-        admin: {
-          email: "person@example.com",
-          name: "Ada Lovelace",
-          role: "admin",
-          userId: "user_123",
-        },
-        ok: true,
-      }),
-      reservePaymentForInvoiceCreationFn,
+      createPendingInvoiceFn,
+      ensureAppUserFn,
+      markInvoiceCreationFailedFn: async () => undefined,
+      requireTrustedInternalAdminFn: async () => createAdminAccess(),
+      storeCreatedInvoiceFn,
     });
 
-    const response = await handler(
-      createRequest({ headers: { "idempotency-key": "idem-123" } }),
-    );
+    const response = await handler(createRequest());
 
     expect(response.status).toBe(200);
-    expect(createPaymentDraftFn).toHaveBeenCalledWith(
-      expect.objectContaining({ idempotencyKey: "idem-123" }),
-    );
-    expect(reservePaymentForInvoiceCreationFn).toHaveBeenCalledWith(
-      "payment_123",
-    );
+    expect(ensureAppUserFn).toHaveBeenCalledWith({
+      authUserId: "user_123",
+      email: "person@example.com",
+      fullName: "Ada Lovelace",
+    });
+    expect(createPendingInvoiceFn).toHaveBeenCalledWith({
+      amountMinor: 12500,
+      currency: "USD",
+      customerEmail: "person@example.com",
+      customerName: "Ada Lovelace",
+      description: "Expert matching",
+      userId: "app_user_1",
+    });
     expect(createInvoiceFn).toHaveBeenCalledWith({
       amountMinor: 12500,
       currency: "USD",
@@ -142,7 +83,7 @@ describe("POST /api/monobank/invoice", () => {
       validitySeconds: 86400,
       webHookUrl: "https://example.com/api/monobank/webhook",
     });
-    expect(completePaymentCreationFn).toHaveBeenCalledWith({
+    expect(storeCreatedInvoiceFn).toHaveBeenCalledWith({
       expiresAt: expect.any(String),
       invoiceId: "invoice_123",
       pageUrl: "https://mono/pay/123",
@@ -152,74 +93,61 @@ describe("POST /api/monobank/invoice", () => {
         pageUrl: "https://mono/pay/123",
       },
     });
-  });
-
-  it("returns 409 while an idempotent request is already in flight", async () => {
-    const createInvoiceFn = mock(async () => ({
-      invoiceId: "invoice_123",
-      pageUrl: "https://mono/pay/123",
-    }));
-    const handler = createPostHandler({
-      completePaymentCreationFn: async () => undefined,
-      createInvoiceFn,
-      createPaymentDraftFn: async () => ({
-        ...createPaymentState({
-          reused: true,
-          status: "creating_invoice",
-        }),
-      }),
-      markPaymentCreationFailedFn: async () => undefined,
-      requireTrustedInternalAdminFn: async () => ({
-        admin: {
-          email: "person@example.com",
-          name: "Ada Lovelace",
-          role: "admin",
-          userId: "user_123",
-        },
-        ok: true,
-      }),
-      reservePaymentForInvoiceCreationFn: async () => null,
-    });
-
-    const response = await handler(
-      createRequest({ headers: { "idempotency-key": "idem-123" } }),
-    );
-
-    expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
-      error:
-        "A request with this idempotency key is already creating an invoice. Retry shortly.",
-      paymentId: "payment_123",
-    });
-    expect(createInvoiceFn).not.toHaveBeenCalled();
-  });
-
-  it("does not mark the payment as creation_failed after the invoice was persisted", async () => {
-    const completePaymentCreationFn = mock(async () => undefined);
-    const markPaymentCreationFailedFn = mock(async () => undefined);
-    const createInvoiceFn = mock(async () => ({
+      expiresAt: expect.any(String),
       invoiceId: "invoice_123",
       pageUrl: "https://mono/pay/123",
-    }));
+      paymentId: "payment_123",
+      qrCodeDataUrl: undefined,
+    });
+  });
+
+  it("marks the stored invoice as failed when Monobank create fails", async () => {
+    const markInvoiceCreationFailedFn = mock(async () => undefined);
     const handler = createPostHandler({
-      completePaymentCreationFn,
-      createInvoiceFn,
-      createPaymentDraftFn: async () => createPaymentState({}),
-      markPaymentCreationFailedFn,
+      createInvoiceFn: async () => {
+        throw new Error("Monobank is unavailable");
+      },
+      createPendingInvoiceFn: async () => ({
+        paymentId: "payment_123",
+        reference: "mb-payment_123",
+      }),
+      ensureAppUserFn: async () => "app_user_1",
+      markInvoiceCreationFailedFn,
+      requireTrustedInternalAdminFn: async () => createAdminAccess(),
+      storeCreatedInvoiceFn: async () => undefined,
+    });
+
+    const response = await handler(createRequest());
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: "Monobank is unavailable" });
+    expect(markInvoiceCreationFailedFn).toHaveBeenCalledWith({
+      errorMessage: "Monobank is unavailable",
+      paymentId: "payment_123",
+      providerPayload: undefined,
+    });
+  });
+
+  it("does not mark the invoice as failed after it was persisted", async () => {
+    const markInvoiceCreationFailedFn = mock(async () => undefined);
+    const storeCreatedInvoiceFn = mock(async () => undefined);
+    const handler = createPostHandler({
+      createInvoiceFn: async () => ({
+        invoiceId: "invoice_123",
+        pageUrl: "https://mono/pay/123",
+      }),
+      createPendingInvoiceFn: async () => ({
+        paymentId: "payment_123",
+        reference: "mb-payment_123",
+      }),
+      ensureAppUserFn: async () => "app_user_1",
+      markInvoiceCreationFailedFn,
       qrcodeToDataUrl: mock(async () => {
         throw new Error("QR generation failed");
       }),
-      requireTrustedInternalAdminFn: async () => ({
-        admin: {
-          email: "person@example.com",
-          name: "Ada Lovelace",
-          role: "admin",
-          userId: "user_123",
-        },
-        ok: true,
-      }),
-      reservePaymentForInvoiceCreationFn: async () =>
-        createReservedPaymentState(),
+      requireTrustedInternalAdminFn: async () => createAdminAccess(),
+      storeCreatedInvoiceFn,
     });
 
     const response = await handler(
@@ -227,7 +155,7 @@ describe("POST /api/monobank/invoice", () => {
     );
 
     expect(response.status).toBe(500);
-    expect(completePaymentCreationFn).toHaveBeenCalledWith({
+    expect(storeCreatedInvoiceFn).toHaveBeenCalledWith({
       expiresAt: expect.any(String),
       invoiceId: "invoice_123",
       pageUrl: "https://mono/pay/123",
@@ -237,6 +165,6 @@ describe("POST /api/monobank/invoice", () => {
         pageUrl: "https://mono/pay/123",
       },
     });
-    expect(markPaymentCreationFailedFn).not.toHaveBeenCalled();
+    expect(markInvoiceCreationFailedFn).not.toHaveBeenCalled();
   });
 });
