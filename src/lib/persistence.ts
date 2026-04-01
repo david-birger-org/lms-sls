@@ -1,6 +1,7 @@
 import { getDatabase } from "./database.js";
 import type {
   MonobankInvoiceStatusResponse,
+  MonobankPaymentInfo,
   SupportedCurrency,
 } from "./monobank.js";
 import {
@@ -42,6 +43,24 @@ interface PendingPaymentRow {
   status: PaymentStatus;
 }
 
+interface PaymentHistoryRow {
+  amount_minor: number | string;
+  created_at: string;
+  currency: SupportedCurrency;
+  customer_name: string;
+  description: string;
+  expires_at: string | null;
+  failure_reason: string | null;
+  final_amount_minor: number | string | null;
+  invoice_id: string | null;
+  page_url: string | null;
+  payment_info: unknown;
+  provider_modified_at: string | null;
+  provider_status: string | null;
+  reference: string;
+  status: PaymentStatus;
+}
+
 interface PaymentProviderStateRow {
   provider_modified_at: string | null;
 }
@@ -78,6 +97,10 @@ export function cleanNullableText(value?: unknown) {
   return null;
 }
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function normalizeProviderTimestamp(value?: string | null) {
   const normalizedValue = cleanNullableText(value);
 
@@ -103,6 +126,59 @@ function normalizeMinorAmount(value: number | string) {
   return Number.isFinite(parsedValue) ? parsedValue : 0;
 }
 
+function normalizeOptionalMinorAmount(value: number | string | null) {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  const parsedValue = normalizeMinorAmount(value);
+  return Number.isFinite(parsedValue) ? parsedValue : undefined;
+}
+
+function normalizePaymentInfo(value: unknown): MonobankPaymentInfo | undefined {
+  let rawValue: unknown = value;
+
+  if (typeof value === "string") {
+    try {
+      rawValue = JSON.parse(value) as unknown;
+    } catch {
+      return undefined;
+    }
+  }
+
+  if (!isObjectRecord(rawValue)) {
+    return undefined;
+  }
+
+  return {
+    approvalCode: cleanNullableText(rawValue.approvalCode) ?? undefined,
+    bank: cleanNullableText(rawValue.bank) ?? undefined,
+    country: cleanNullableText(rawValue.country) ?? undefined,
+    maskedPan: cleanNullableText(rawValue.maskedPan) ?? undefined,
+    paymentMethod: cleanNullableText(rawValue.paymentMethod) ?? undefined,
+    paymentSystem: cleanNullableText(rawValue.paymentSystem) ?? undefined,
+    rrn: cleanNullableText(rawValue.rrn) ?? undefined,
+    terminal: cleanNullableText(rawValue.terminal) ?? undefined,
+    tranId: cleanNullableText(rawValue.tranId) ?? undefined,
+  };
+}
+
+function resolvePaymentHistoryStatus(row: {
+  provider_status?: string | null;
+  status?: PaymentStatus | null;
+}) {
+  return (
+    resolveMonobankPaymentStatus(row.status, row.provider_status) ?? row.status
+  );
+}
+
+function resolvePaymentHistoryDate(row: {
+  created_at: string;
+  provider_modified_at?: string | null;
+}) {
+  return row.provider_modified_at ?? row.created_at;
+}
+
 function toPendingInvoiceRecord(row: PendingPaymentRow): PendingInvoiceRecord {
   return {
     amount: normalizeMinorAmount(row.amount_minor),
@@ -118,6 +194,48 @@ function toPendingInvoiceRecord(row: PendingPaymentRow): PendingInvoiceRecord {
     status:
       resolveMonobankPaymentStatus(row.status, row.provider_status) ??
       row.status,
+  };
+}
+
+function toPaymentHistoryRecord(row: PaymentHistoryRow) {
+  const paymentInfo = normalizePaymentInfo(row.payment_info);
+
+  return {
+    amount:
+      normalizeOptionalMinorAmount(row.final_amount_minor) ??
+      normalizeMinorAmount(row.amount_minor),
+    ccy: row.currency,
+    customerName: row.customer_name,
+    date: resolvePaymentHistoryDate(row),
+    destination: row.description,
+    error: row.failure_reason ?? undefined,
+    expiresAt: row.expires_at ?? undefined,
+    invoiceId: row.invoice_id ?? undefined,
+    maskedPan: paymentInfo?.maskedPan,
+    pageUrl: row.page_url ?? undefined,
+    reference: row.reference,
+    status: resolvePaymentHistoryStatus(row) ?? undefined,
+  };
+}
+
+function toPaymentDetailsRecord(row: PaymentHistoryRow) {
+  const paymentInfo = normalizePaymentInfo(row.payment_info);
+
+  return {
+    amount: normalizeMinorAmount(row.amount_minor),
+    createdDate: row.created_at,
+    ccy: row.currency,
+    customerName: row.customer_name,
+    destination: row.description,
+    expiresAt: row.expires_at ?? undefined,
+    failureReason: row.failure_reason ?? undefined,
+    finalAmount: normalizeOptionalMinorAmount(row.final_amount_minor),
+    invoiceId: row.invoice_id ?? undefined,
+    modifiedDate: row.provider_modified_at ?? undefined,
+    pageUrl: row.page_url ?? undefined,
+    paymentInfo,
+    reference: row.reference,
+    status: resolvePaymentHistoryStatus(row) ?? undefined,
   };
 }
 
@@ -501,6 +619,66 @@ export async function listPendingInvoices(limit = 50) {
   `;
 
   return rows.map(toPendingInvoiceRecord);
+}
+
+export async function listPaymentHistory(days: number) {
+  const database = getDatabase();
+  const fromDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+  const rows = await database<PaymentHistoryRow[]>`
+    select
+      amount_minor,
+      created_at,
+      currency,
+      customer_name,
+      description,
+      expires_at,
+      failure_reason,
+      final_amount_minor,
+      invoice_id,
+      page_url,
+      payment_info,
+      provider_modified_at,
+      provider_status,
+      reference,
+      status
+    from payments
+    where provider = ${"monobank"}
+      and coalesce(provider_modified_at, created_at) >= ${fromDate.toISOString()}
+    order by coalesce(provider_modified_at, created_at) desc, created_at desc
+  `;
+
+  return rows.map(toPaymentHistoryRecord);
+}
+
+export async function getPaymentDetailsByInvoiceId(invoiceId: string) {
+  const database = getDatabase();
+  const rows = await database<PaymentHistoryRow[]>`
+    select
+      amount_minor,
+      created_at,
+      currency,
+      customer_name,
+      description,
+      expires_at,
+      failure_reason,
+      final_amount_minor,
+      invoice_id,
+      page_url,
+      payment_info,
+      provider_modified_at,
+      provider_status,
+      reference,
+      status
+    from payments
+    where provider = ${"monobank"}
+      and invoice_id = ${invoiceId}
+    order by updated_at desc, created_at desc
+    limit 1
+  `;
+
+  const row = rows[0];
+  return row ? toPaymentDetailsRecord(row) : null;
 }
 
 export async function markInvoiceCancelled({
