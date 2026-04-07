@@ -40,8 +40,13 @@ The API surface lives under `api/monobank/*`:
 
 - `POST /api/monobank/invoice`
 - `POST /api/monobank/webhook`
-- `GET /api/monobank/invoice/status`
+- `GET /api/monobank/invoices/pending`
 - `GET /api/monobank/statement`
+
+`GET /api/monobank/invoices/pending` supports two admin read patterns:
+
+- `?limit=50` returns pending invoices
+- `?invoiceId=...` fetches and syncs a single invoice status
 
 `lms-admin` now owns Better Auth completely. `lms-sls` only accepts trusted server-to-server requests from the admin app. `POST /api/monobank/invoice` stores the payment in Supabase before creating the Monobank invoice. Send an `Idempotency-Key` header to make retries safe; repeated requests with the same key reuse the existing payment row and invoice state.
 

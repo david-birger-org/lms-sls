@@ -1,6 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
 
-import { createPostHandler } from "./remove.js";
+import { createPostHandler } from "../../../../api/monobank/invoice/remove.js";
 
 function createRequest(body: unknown) {
   return new Request("https://example.com/api/monobank/invoice/remove", {

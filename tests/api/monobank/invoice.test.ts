@@ -1,6 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
 
-import { createPostHandler } from "./invoice.js";
+import { createPostHandler } from "../../../api/monobank/invoice.js";
 
 const baseRequestBody = {
   amount: 125,

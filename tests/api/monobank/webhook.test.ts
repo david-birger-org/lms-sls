@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import { createPostHandler } from "./webhook.js";
+import { createPostHandler } from "../../../api/monobank/webhook.js";
 
 function createRequest(body: unknown, headers?: Record<string, string>) {
   return new Request("https://example.com/api/monobank/webhook", {
