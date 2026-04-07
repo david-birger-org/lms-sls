@@ -53,20 +53,18 @@ export async function selectAllProducts() {
 
 export async function selectProductById(id: string) {
   const database = getDatabase();
-  const rows = await database.unsafe<ProductRow[]>(
-    `select ${PRODUCT_COLUMNS} from products where id = ? limit 1`,
-    [id],
-  );
+  const rows = await database<ProductRow[]>`
+    select ${database.unsafe(PRODUCT_COLUMNS)} from products where id = ${id} limit 1
+  `;
 
   return rows[0] ?? null;
 }
 
 export async function selectProductBySlug(slug: string) {
   const database = getDatabase();
-  const rows = await database.unsafe<ProductRow[]>(
-    `select ${PRODUCT_COLUMNS} from products where slug = ? limit 1`,
-    [slug],
-  );
+  const rows = await database<ProductRow[]>`
+    select ${database.unsafe(PRODUCT_COLUMNS)} from products where slug = ${slug} limit 1
+  `;
 
   return rows[0] ?? null;
 }
