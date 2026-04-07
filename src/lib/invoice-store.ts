@@ -1,6 +1,7 @@
 import {
   insertPendingInvoiceRow,
   selectLatestProviderStateRow,
+  selectPaymentByIdempotencyKey,
   selectPaymentHistoryRowByInvoiceId,
   selectPaymentHistoryRows,
   selectPendingPaymentRows,
@@ -225,7 +226,13 @@ export async function ensureAppUser(input: EnsureAppUserInput) {
   });
 }
 
-export async function createPendingInvoice(input: CreatePendingInvoiceInput) {
+export async function findPaymentByIdempotencyKey(idempotencyKey: string) {
+  return selectPaymentByIdempotencyKey(idempotencyKey);
+}
+
+export async function createPendingInvoice(
+  input: CreatePendingInvoiceInput & { idempotencyKey?: string | null },
+) {
   const paymentId = input.paymentId ?? crypto.randomUUID();
   const customerEmail = cleanNullableText(input.customerEmail);
   const customerName = cleanNullableText(input.customerName);
@@ -240,7 +247,9 @@ export async function createPendingInvoice(input: CreatePendingInvoiceInput) {
     customerEmail,
     customerName,
     description: input.description,
+    idempotencyKey: input.idempotencyKey ?? null,
     paymentId,
+    productId: input.productId ?? null,
     reference: `mb-${paymentId}`,
     status: creatingInvoiceStatus,
     userId: input.userId,

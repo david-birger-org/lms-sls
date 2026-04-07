@@ -60,6 +60,7 @@ export interface CreatePendingInvoiceInput {
   customerName: string;
   description: string;
   paymentId?: string;
+  productId?: string | null;
   userId: string;
 }
 

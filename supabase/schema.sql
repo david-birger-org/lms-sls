@@ -86,6 +86,28 @@ create table if not exists public.auth_verifications (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
+create table if not exists public.products (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,
+  name_uk text not null,
+  name_en text not null,
+  description_uk text,
+  description_en text,
+  pricing_type text not null default 'on_request',
+  price_uah_minor bigint,
+  price_usd_minor bigint,
+  image_url text,
+  active boolean not null default true,
+  sort_order int not null default 0,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  constraint products_pricing_type_check check (pricing_type in ('fixed', 'on_request')),
+  constraint products_fixed_prices_required check (
+    pricing_type <> 'fixed'
+    or (price_uah_minor is not null and price_usd_minor is not null)
+  )
+);
+
 create table if not exists public.payments (
   id uuid primary key,
   user_id uuid not null references public.app_users(id) on delete restrict,
@@ -108,6 +130,7 @@ create table if not exists public.payments (
   provider_payload jsonb,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now()),
+  product_id uuid references public.products(id),
   constraint payments_currency_check check (currency in ('UAH', 'USD'))
 );
 
@@ -135,3 +158,13 @@ create index if not exists idx_payments_reference
 create unique index if not exists idx_payments_idempotency_key
   on public.payments (idempotency_key)
   where idempotency_key is not null;
+
+create index if not exists idx_products_slug
+  on public.products (slug);
+
+create index if not exists idx_products_active
+  on public.products (active)
+  where active = true;
+
+create index if not exists idx_payments_product_id
+  on public.payments (product_id);

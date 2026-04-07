@@ -196,6 +196,7 @@ export async function createInvoice({
   currency,
   customerName,
   description,
+  redirectUrl,
   reference,
   webHookUrl,
   validitySeconds,
@@ -204,6 +205,7 @@ export async function createInvoice({
   currency: SupportedCurrency;
   customerName: string;
   description: string;
+  redirectUrl?: string;
   reference: string;
   webHookUrl?: string;
   validitySeconds: number;
@@ -220,6 +222,7 @@ export async function createInvoice({
         destination: description,
         comment: `${customerName}: ${description}`,
       },
+      redirectUrl,
       webHookUrl,
     },
   });

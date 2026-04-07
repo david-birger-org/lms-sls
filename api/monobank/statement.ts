@@ -1,15 +1,9 @@
 import { getErrorMessage } from "../../src/lib/errors.js";
-import { requireTrustedInternalAdmin } from "../../src/lib/internal-auth.js";
+import { withTrustedInternalAdmin } from "../../src/lib/internal-auth.js";
 import { fetchStatement, getRangeDays } from "../../src/lib/monobank.js";
 import { json } from "../../src/lib/response.js";
 
-export async function GET(request: Request) {
-  const access = await requireTrustedInternalAdmin(request);
-
-  if (!access.ok) {
-    return access.response;
-  }
-
+export const GET = withTrustedInternalAdmin(async (request) => {
   try {
     const requestUrl = new URL(request.url);
     const safeDays = getRangeDays(requestUrl.searchParams);
@@ -22,4 +16,4 @@ export async function GET(request: Request) {
       { status: 500 },
     );
   }
-}
+});

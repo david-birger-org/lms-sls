@@ -3,6 +3,10 @@ function readEnv(name: string) {
   return value ? value : null;
 }
 
+export function readOptionalEnv(name: string) {
+  return readEnv(name);
+}
+
 function getRequiredEnv(name: string) {
   const value = readEnv(name);
 
@@ -22,5 +26,19 @@ export const env = {
   },
   get monobankToken() {
     return getRequiredEnv("MONOBANK_TOKEN");
+  },
+  get mail() {
+    const gmailUser = readOptionalEnv("GMAIL_USER");
+    const gmailPassword =
+      readOptionalEnv("GMAIL_PASSWORD") ??
+      readOptionalEnv("GMAIL_APP_PASSWORD");
+    const fromAddress = readOptionalEnv("SMTP_FROM") ?? gmailUser;
+
+    return {
+      destinationEmail: readOptionalEnv("MAIL_SEND_TO"),
+      fromAddress,
+      gmailPassword,
+      gmailUser,
+    };
   },
 };

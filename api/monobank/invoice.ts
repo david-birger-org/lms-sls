@@ -5,6 +5,7 @@ import { requireTrustedInternalAdmin } from "../../src/lib/internal-auth.js";
 import {
   createPendingInvoice,
   ensureAppUser,
+  findPaymentByIdempotencyKey,
   markInvoiceCreationFailed,
   storeCreatedInvoice,
 } from "../../src/lib/invoice-store.js";
@@ -27,6 +28,7 @@ interface CreateInvoiceRequestBody {
   customerName?: unknown;
   description?: unknown;
   output?: unknown;
+  redirectUrl?: unknown;
   validitySeconds?: unknown;
 }
 
@@ -37,6 +39,7 @@ interface ParsedCreateInvoiceInput {
   customerName: string;
   description: string;
   output: OutputMode;
+  redirectUrl?: string;
   validitySeconds: number;
 }
 
@@ -70,6 +73,7 @@ function parseCreateInvoiceInput(
     customerName,
     description,
     output,
+    redirectUrl,
     validitySeconds,
   } = body as CreateInvoiceRequestBody;
   const normalizedAmount = typeof amount === "number" ? amount : Number(amount);
@@ -108,6 +112,8 @@ function parseCreateInvoiceInput(
     return badRequest("Expiration time must be at least 60 seconds.");
   }
 
+  const normalizedRedirectUrl = getTrimmedString(redirectUrl) ?? undefined;
+
   return {
     amountMinor: toMinorUnits(normalizedAmount),
     currency,
@@ -115,6 +121,7 @@ function parseCreateInvoiceInput(
     customerName: normalizedCustomerName,
     description: normalizedDescription,
     output,
+    redirectUrl: normalizedRedirectUrl,
     validitySeconds: normalizedValiditySeconds,
   };
 }
@@ -166,6 +173,7 @@ export function createPostHandler({
   createInvoiceFn = createInvoice,
   createPendingInvoiceFn = createPendingInvoice,
   ensureAppUserFn = ensureAppUser,
+  findPaymentByIdempotencyKeyFn = findPaymentByIdempotencyKey,
   markInvoiceCreationFailedFn = markInvoiceCreationFailed,
   qrcodeToDataUrl = QRCode.toDataURL,
   requireTrustedInternalAdminFn = requireTrustedInternalAdmin,
@@ -174,6 +182,7 @@ export function createPostHandler({
   createInvoiceFn?: typeof createInvoice;
   createPendingInvoiceFn?: typeof createPendingInvoice;
   ensureAppUserFn?: typeof ensureAppUser;
+  findPaymentByIdempotencyKeyFn?: typeof findPaymentByIdempotencyKey;
   markInvoiceCreationFailedFn?: typeof markInvoiceCreationFailed;
   qrcodeToDataUrl?: typeof QRCode.toDataURL;
   requireTrustedInternalAdminFn?: typeof requireTrustedInternalAdmin;
@@ -203,6 +212,21 @@ export function createPostHandler({
         return parsedInput;
       }
 
+      const idempotencyKey = request.headers.get("idempotency-key")?.trim();
+
+      if (idempotencyKey) {
+        const existing = await findPaymentByIdempotencyKeyFn(idempotencyKey);
+
+        if (existing?.invoice_id && existing.page_url) {
+          return json({
+            expiresAt: existing.expires_at,
+            invoiceId: existing.invoice_id,
+            pageUrl: existing.page_url,
+            paymentId: existing.id,
+          });
+        }
+      }
+
       const customerEmail = parsedInput.customerEmail ?? access.admin.email;
       const userId = await ensureAppUserFn({
         authUserId: access.admin.userId,
@@ -215,6 +239,7 @@ export function createPostHandler({
         customerEmail,
         customerName: parsedInput.customerName,
         description: parsedInput.description,
+        idempotencyKey: idempotencyKey ?? null,
         userId,
       });
 
@@ -228,6 +253,7 @@ export function createPostHandler({
           currency: parsedInput.currency,
           customerName: parsedInput.customerName,
           description: parsedInput.description,
+          redirectUrl: parsedInput.redirectUrl,
           reference: pendingInvoice.reference,
           validitySeconds: parsedInput.validitySeconds,
           webHookUrl: getWebhookUrl(request),

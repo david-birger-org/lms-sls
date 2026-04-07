@@ -18,6 +18,11 @@ type RequireTrustedInternalAdminResult =
       response: Response;
     };
 
+type TrustedInternalAdminHandler = (
+  request: Request,
+  admin: TrustedAdmin,
+) => Response | Promise<Response>;
+
 function getTrimmedHeader(headers: Headers, name: string) {
   const value = headers.get(name)?.trim();
   return value ? value : null;
@@ -76,3 +81,11 @@ export function createRequireTrustedInternalAdmin(
 }
 
 export const requireTrustedInternalAdmin = createRequireTrustedInternalAdmin();
+
+export function withTrustedInternalAdmin(handler: TrustedInternalAdminHandler) {
+  return async function handleTrustedInternalAdminRequest(request: Request) {
+    const access = await requireTrustedInternalAdmin(request);
+    if (!access.ok) return access.response;
+    return handler(request, access.admin);
+  };
+}

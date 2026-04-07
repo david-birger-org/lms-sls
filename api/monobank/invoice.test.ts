@@ -72,6 +72,7 @@ describe("POST /api/monobank/invoice", () => {
       customerEmail: "person@example.com",
       customerName: "Ada Lovelace",
       description: "Expert matching",
+      idempotencyKey: null,
       userId: "app_user_1",
     });
     expect(createInvoiceFn).toHaveBeenCalledWith({

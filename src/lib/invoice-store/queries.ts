@@ -59,13 +59,35 @@ export async function upsertAppUserRow({
   return getRequiredRow(rows, `Failed to resolve app user ${authUserId}.`).id;
 }
 
+export async function selectPaymentByIdempotencyKey(idempotencyKey: string) {
+  const database = getDatabase();
+  const rows = await database<
+    {
+      expires_at: string | null;
+      invoice_id: string | null;
+      page_url: string | null;
+      id: string;
+      status: PaymentStatus;
+    }[]
+  >`
+    select id, invoice_id, page_url, expires_at, status
+    from payments
+    where idempotency_key = ${idempotencyKey}
+    limit 1
+  `;
+
+  return rows[0] ?? null;
+}
+
 export async function insertPendingInvoiceRow({
   amountMinor,
   currency,
   customerEmail,
   customerName,
   description,
+  idempotencyKey,
   paymentId,
+  productId,
   reference,
   status,
   userId,
@@ -75,7 +97,9 @@ export async function insertPendingInvoiceRow({
   customerEmail: string | null;
   customerName: string;
   description: string;
+  idempotencyKey: string | null;
   paymentId: string;
+  productId: string | null;
   reference: string;
   status: PaymentStatus;
   userId: string;
@@ -92,7 +116,9 @@ export async function insertPendingInvoiceRow({
       currency,
       customer_name,
       customer_email,
-      description
+      description,
+      idempotency_key,
+      product_id
     )
     values (
       ${paymentId},
@@ -104,7 +130,9 @@ export async function insertPendingInvoiceRow({
       ${currency},
       ${customerName},
       ${customerEmail},
-      ${description}
+      ${description},
+      ${idempotencyKey},
+      ${productId}
     )
     returning id, reference
   `;
