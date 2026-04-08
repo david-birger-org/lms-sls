@@ -14,8 +14,8 @@ export async function GET(request: Request) {
       id: row.id,
       status: row.status,
       amountMinor: Number(row.amount_minor),
-      finalAmountMinor: row.final_amount_minor
-        ? Number(row.final_amount_minor)
+      profitAmountMinor: row.profit_amount_minor
+        ? Number(row.profit_amount_minor)
         : null,
       currency: row.currency,
       description: row.description,

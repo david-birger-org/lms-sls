@@ -118,7 +118,7 @@ create table if not exists public.payments (
   provider_status text,
   status public.payment_status not null,
   amount_minor bigint not null,
-  final_amount_minor bigint,
+  profit_amount_minor bigint,
   currency text not null,
   customer_name text not null,
   customer_email text,
@@ -131,6 +131,7 @@ create table if not exists public.payments (
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now()),
   product_id uuid references public.products(id),
+  product_slug text,
   constraint payments_currency_check check (currency in ('UAH', 'USD'))
 );
 
@@ -168,3 +169,7 @@ create index if not exists idx_products_active
 
 create index if not exists idx_payments_product_id
   on public.payments (product_id);
+
+create index if not exists idx_payments_product_slug
+  on public.payments (product_slug)
+  where product_slug is not null;

@@ -80,6 +80,16 @@ const CURRENCY_CODE: Record<SupportedCurrency, number> = {
   USD: 840,
 };
 
+const CURRENCY_BY_CODE: Record<number, SupportedCurrency> = {
+  980: "UAH",
+  840: "USD",
+};
+
+export function getCurrencyFromCode(code: number | null | undefined) {
+  if (typeof code !== "number") return null;
+  return CURRENCY_BY_CODE[code] ?? null;
+}
+
 const MAX_RANGE_SECONDS = 31 * 24 * 60 * 60;
 
 function getMonobankBaseUrl() {

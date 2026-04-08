@@ -22,9 +22,10 @@ import type {
   PendingPaymentRow,
   StoreCreatedInvoiceInput,
 } from "./invoice-store/types.js";
-import type {
-  MonobankInvoiceStatusResponse,
-  MonobankPaymentInfo,
+import {
+  getCurrencyFromCode,
+  type MonobankInvoiceStatusResponse,
+  type MonobankPaymentInfo,
 } from "./monobank.js";
 import {
   normalizeMonobankStatus,
@@ -132,6 +133,7 @@ function normalizePaymentInfo(value: unknown): MonobankPaymentInfo | undefined {
     approvalCode: cleanNullableText(rawValue.approvalCode) ?? undefined,
     bank: cleanNullableText(rawValue.bank) ?? undefined,
     country: cleanNullableText(rawValue.country) ?? undefined,
+    fee: typeof rawValue.fee === "number" ? rawValue.fee : undefined,
     maskedPan: cleanNullableText(rawValue.maskedPan) ?? undefined,
     paymentMethod: cleanNullableText(rawValue.paymentMethod) ?? undefined,
     paymentSystem: cleanNullableText(rawValue.paymentSystem) ?? undefined,
@@ -168,6 +170,7 @@ function toPendingInvoiceRecord(row: PendingPaymentRow): PendingInvoiceRecord {
     expiresAt: row.expires_at ?? undefined,
     invoiceId: row.invoice_id,
     pageUrl: row.page_url ?? undefined,
+    productSlug: row.product_slug ?? undefined,
     reference: row.reference,
     status: resolveStoredPaymentStatus(row) ?? row.status,
   };
@@ -177,9 +180,7 @@ function toPaymentHistoryRecord(row: PaymentHistoryRow): PaymentHistoryRecord {
   const paymentInfo = normalizePaymentInfo(row.payment_info);
 
   return {
-    amount:
-      normalizeOptionalMinorAmount(row.final_amount_minor) ??
-      normalizeMinorAmount(row.amount_minor),
+    amount: normalizeMinorAmount(row.amount_minor),
     ccy: row.currency,
     customerName: row.customer_name,
     date: resolvePaymentHistoryDate(row),
@@ -189,6 +190,7 @@ function toPaymentHistoryRecord(row: PaymentHistoryRow): PaymentHistoryRecord {
     invoiceId: row.invoice_id ?? undefined,
     maskedPan: paymentInfo?.maskedPan,
     pageUrl: row.page_url ?? undefined,
+    productSlug: row.product_slug ?? undefined,
     reference: row.reference,
     status: resolveStoredPaymentStatus(row) ?? undefined,
   };
@@ -205,11 +207,12 @@ function toPaymentDetailsRecord(row: PaymentHistoryRow): PaymentDetailsRecord {
     destination: row.description,
     expiresAt: row.expires_at ?? undefined,
     failureReason: row.failure_reason ?? undefined,
-    finalAmount: normalizeOptionalMinorAmount(row.final_amount_minor),
+    profitAmount: normalizeOptionalMinorAmount(row.profit_amount_minor),
     invoiceId: row.invoice_id ?? undefined,
     modifiedDate: row.provider_modified_at ?? undefined,
     pageUrl: row.page_url ?? undefined,
     paymentInfo,
+    productSlug: row.product_slug ?? undefined,
     reference: row.reference,
     status: resolveStoredPaymentStatus(row) ?? undefined,
   };
@@ -250,6 +253,7 @@ export async function createPendingInvoice(
     idempotencyKey: input.idempotencyKey ?? null,
     paymentId,
     productId: input.productId ?? null,
+    productSlug: cleanNullableText(input.productSlug),
     reference: `mb-${paymentId}`,
     status: creatingInvoiceStatus,
     userId: input.userId,
@@ -347,11 +351,22 @@ export async function syncMonobankPaymentStatus(
     return;
   }
 
+  const fee =
+    typeof invoiceStatus.paymentInfo?.fee === "number"
+      ? invoiceStatus.paymentInfo.fee
+      : 0;
+  const profitAmountMinor =
+    typeof invoiceStatus.amount === "number"
+      ? invoiceStatus.amount - fee
+      : null;
+
   await updatePaymentProviderStateRow({
+    amountMinor: invoiceStatus.amount ?? null,
+    currency: getCurrencyFromCode(invoiceStatus.ccy),
     failureReason:
       cleanNullableText(invoiceStatus.failureReason) ??
       cleanNullableText(invoiceStatus.errCode),
-    finalAmountMinor: invoiceStatus.finalAmount ?? null,
+    profitAmountMinor,
     invoiceId,
     paymentInfo: invoiceStatus.paymentInfo,
     providerModifiedAt,

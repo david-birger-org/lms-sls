@@ -15,6 +15,7 @@ export interface PendingPaymentRow {
   failure_reason: string | null;
   invoice_id: string;
   page_url: string | null;
+  product_slug: string | null;
   provider_status: string | null;
   reference: string;
   status: PaymentStatus;
@@ -28,10 +29,11 @@ export interface PaymentHistoryRow {
   description: string;
   expires_at: string | null;
   failure_reason: string | null;
-  final_amount_minor: number | string | null;
+  profit_amount_minor: number | string | null;
   invoice_id: string | null;
   page_url: string | null;
   payment_info: unknown;
+  product_slug: string | null;
   provider_modified_at: string | null;
   provider_status: string | null;
   reference: string;
@@ -61,6 +63,7 @@ export interface CreatePendingInvoiceInput {
   description: string;
   paymentId?: string;
   productId?: string | null;
+  productSlug?: string | null;
   userId: string;
 }
 
@@ -93,6 +96,7 @@ export interface PendingInvoiceRecord {
   expiresAt?: string;
   invoiceId: string;
   pageUrl?: string;
+  productSlug?: string;
   reference: string;
   status: PaymentStatus;
 }
@@ -108,6 +112,7 @@ export interface PaymentHistoryRecord {
   invoiceId?: string;
   maskedPan?: string;
   pageUrl?: string;
+  productSlug?: string;
   reference: string;
   status?: PaymentStatus;
 }
@@ -120,18 +125,21 @@ export interface PaymentDetailsRecord {
   destination: string;
   expiresAt?: string;
   failureReason?: string;
-  finalAmount?: number;
+  profitAmount?: number;
   invoiceId?: string;
   modifiedDate?: string;
   pageUrl?: string;
   paymentInfo?: MonobankPaymentInfo;
+  productSlug?: string;
   reference: string;
   status?: PaymentStatus;
 }
 
 export interface ProviderStateUpdateInput {
+  amountMinor?: number | null;
+  currency?: SupportedCurrency | null;
   failureReason?: string | null;
-  finalAmountMinor?: number | null;
+  profitAmountMinor?: number | null;
   invoiceId?: string | null;
   paymentInfo?: unknown;
   providerModifiedAt?: string | null;

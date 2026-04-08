@@ -96,6 +96,7 @@ export async function POST(request: Request) {
       customerName,
       description: product.nameEn,
       productId: product.id,
+      productSlug: product.slug,
       userId: appUserId,
     });
     paymentId = pendingInvoice.paymentId;

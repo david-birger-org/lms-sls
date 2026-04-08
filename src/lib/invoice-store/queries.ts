@@ -88,6 +88,7 @@ export async function insertPendingInvoiceRow({
   idempotencyKey,
   paymentId,
   productId,
+  productSlug,
   reference,
   status,
   userId,
@@ -100,6 +101,7 @@ export async function insertPendingInvoiceRow({
   idempotencyKey: string | null;
   paymentId: string;
   productId: string | null;
+  productSlug: string | null;
   reference: string;
   status: PaymentStatus;
   userId: string;
@@ -118,7 +120,8 @@ export async function insertPendingInvoiceRow({
       customer_email,
       description,
       idempotency_key,
-      product_id
+      product_id,
+      product_slug
     )
     values (
       ${paymentId},
@@ -132,7 +135,8 @@ export async function insertPendingInvoiceRow({
       ${customerEmail},
       ${description},
       ${idempotencyKey},
-      ${productId}
+      ${productId},
+      ${productSlug}
     )
     returning id, reference
   `;
@@ -241,6 +245,7 @@ export async function selectPendingPaymentRows({
       failure_reason,
       invoice_id,
       page_url,
+      product_slug,
       provider_status,
       reference,
       status
@@ -271,10 +276,11 @@ export async function selectPaymentHistoryRows(fromDateIso: string) {
       description,
       expires_at,
       failure_reason,
-      final_amount_minor,
+      profit_amount_minor,
       invoice_id,
       page_url,
       payment_info,
+      product_slug,
       provider_modified_at,
       provider_status,
       reference,
@@ -298,10 +304,11 @@ export async function selectPaymentHistoryRowByInvoiceId(invoiceId: string) {
       description,
       expires_at,
       failure_reason,
-      final_amount_minor,
+      profit_amount_minor,
       invoice_id,
       page_url,
       payment_info,
+      product_slug,
       provider_modified_at,
       provider_status,
       reference,
@@ -397,7 +404,9 @@ export async function updatePaymentProviderStateRow(
         provider_modified_at = coalesce(${input.providerModifiedAt ?? null}, payments.provider_modified_at),
         status = coalesce(${input.status ?? null}, payments.status),
         failure_reason = coalesce(${input.failureReason ?? null}, payments.failure_reason),
-        final_amount_minor = coalesce(${input.finalAmountMinor ?? null}, payments.final_amount_minor),
+        amount_minor = coalesce(${input.amountMinor ?? null}, payments.amount_minor),
+        profit_amount_minor = coalesce(${input.profitAmountMinor ?? null}, payments.profit_amount_minor),
+        currency = coalesce(${input.currency ?? null}, payments.currency),
         payment_info = coalesce(${toJsonbValue(input.paymentInfo)}::jsonb, payments.payment_info),
         provider_payload = ${JSON.stringify(input.providerPayload)}::jsonb,
         updated_at = timezone('utc', now())
@@ -417,7 +426,9 @@ export async function updatePaymentProviderStateRow(
         provider_modified_at = coalesce(${input.providerModifiedAt ?? null}, payments.provider_modified_at),
         status = coalesce(${input.status ?? null}, payments.status),
         failure_reason = coalesce(${input.failureReason ?? null}, payments.failure_reason),
-        final_amount_minor = coalesce(${input.finalAmountMinor ?? null}, payments.final_amount_minor),
+        amount_minor = coalesce(${input.amountMinor ?? null}, payments.amount_minor),
+        profit_amount_minor = coalesce(${input.profitAmountMinor ?? null}, payments.profit_amount_minor),
+        currency = coalesce(${input.currency ?? null}, payments.currency),
         payment_info = coalesce(${toJsonbValue(input.paymentInfo)}::jsonb, payments.payment_info),
         provider_payload = ${JSON.stringify(input.providerPayload)}::jsonb,
         updated_at = timezone('utc', now())
@@ -434,7 +445,9 @@ export async function updatePaymentProviderStateRow(
       provider_modified_at = coalesce(${input.providerModifiedAt ?? null}, payments.provider_modified_at),
       status = coalesce(${input.status ?? null}, payments.status),
       failure_reason = coalesce(${input.failureReason ?? null}, payments.failure_reason),
-      final_amount_minor = coalesce(${input.finalAmountMinor ?? null}, payments.final_amount_minor),
+      amount_minor = coalesce(${input.amountMinor ?? null}, payments.amount_minor),
+      profit_amount_minor = coalesce(${input.profitAmountMinor ?? null}, payments.profit_amount_minor),
+      currency = coalesce(${input.currency ?? null}, payments.currency),
       payment_info = coalesce(${toJsonbValue(input.paymentInfo)}::jsonb, payments.payment_info),
       provider_payload = ${JSON.stringify(input.providerPayload)}::jsonb,
       updated_at = timezone('utc', now())

@@ -1,7 +1,10 @@
 import { getErrorMessage } from "../../../src/lib/errors.js";
 import { withTrustedInternalAdmin } from "../../../src/lib/internal-auth.js";
-import { listPendingInvoices } from "../../../src/lib/invoice-store.js";
-import { syncMonobankPaymentStatus } from "../../../src/lib/invoice-store.js";
+import {
+  getPaymentDetailsByInvoiceId,
+  listPendingInvoices,
+  syncMonobankPaymentStatus,
+} from "../../../src/lib/invoice-store.js";
 import { fetchInvoiceStatus } from "../../../src/lib/monobank.js";
 import { json } from "../../../src/lib/response.js";
 
@@ -14,7 +17,9 @@ export const GET = withTrustedInternalAdmin(async (request) => {
       const invoiceStatus = await fetchInvoiceStatus(invoiceId);
       await syncMonobankPaymentStatus(invoiceStatus);
 
-      return json(invoiceStatus);
+      const payment = await getPaymentDetailsByInvoiceId(invoiceId);
+
+      return json(payment ?? invoiceStatus);
     }
 
     const limitParam = Number(requestUrl.searchParams.get("limit") ?? "50");

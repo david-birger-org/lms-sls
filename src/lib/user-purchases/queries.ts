@@ -4,7 +4,7 @@ export interface UserPurchaseRow {
   id: string;
   status: string;
   amount_minor: number | string;
-  final_amount_minor: number | string | null;
+  profit_amount_minor: number | string | null;
   currency: string;
   description: string;
   created_at: string;
@@ -24,7 +24,7 @@ export async function selectUserPurchases(authUserId: string) {
       p.id,
       p.status,
       p.amount_minor,
-      p.final_amount_minor,
+      p.profit_amount_minor,
       p.currency,
       p.description,
       p.created_at,
