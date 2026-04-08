@@ -58,7 +58,11 @@ export function parseCreateProductInput(
 
   const priceUahMinor = parseOptionalMinor(input.priceUahMinor);
   const priceUsdMinor = parseOptionalMinor(input.priceUsdMinor);
-  if (priceUahMinor === undefined || priceUsdMinor === undefined) return null;
+  if (
+    pricingType === "fixed" &&
+    (priceUahMinor === undefined || priceUsdMinor === undefined)
+  )
+    return null;
 
   if (
     pricingType === "fixed" &&
@@ -72,9 +76,9 @@ export function parseCreateProductInput(
   const sortOrder = parseOptionalSortOrder(input.sortOrder);
 
   if (
-    descriptionUk === undefined ||
-    descriptionEn === undefined ||
-    imageUrl === undefined ||
+    (input.descriptionUk !== undefined && descriptionUk === undefined) ||
+    (input.descriptionEn !== undefined && descriptionEn === undefined) ||
+    (input.imageUrl !== undefined && imageUrl === undefined) ||
     (input.sortOrder !== undefined && sortOrder === undefined)
   )
     return null;

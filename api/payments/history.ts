@@ -4,7 +4,10 @@ import {
   getPaymentDetailsByInvoiceId,
   listPaymentHistory,
 } from "../../src/lib/invoice-store.js";
-import { getStatementRange } from "../../src/lib/monobank.js";
+import {
+  getStatementRange,
+  InvalidStatementRangeError,
+} from "../../src/lib/monobank.js";
 import { json } from "../../src/lib/response.js";
 
 export const GET = withTrustedInternalAdmin(async (request) => {
@@ -26,6 +29,9 @@ export const GET = withTrustedInternalAdmin(async (request) => {
 
     return json({ list: await listPaymentHistory(range) });
   } catch (error) {
+    if (error instanceof InvalidStatementRangeError)
+      return json({ error: error.message }, { status: 400 });
+
     const message = getErrorMessage(error);
 
     return json(

@@ -91,6 +91,9 @@ export function getCurrencyFromCode(code: number | null | undefined) {
 }
 
 const MAX_RANGE_SECONDS = 31 * 24 * 60 * 60;
+const MAX_STATEMENT_RANGE_SECONDS = MAX_RANGE_SECONDS;
+
+export class InvalidStatementRangeError extends Error {}
 
 function getMonobankBaseUrl() {
   return "https://api.monobank.ua/api/merchant/";
@@ -164,7 +167,16 @@ export function getStatementRange(
     Number.isFinite(toParam) &&
     fromParam < toParam
   ) {
-    return { from: Math.floor(fromParam), to: Math.floor(toParam) };
+    const from = Math.floor(fromParam);
+    const to = Math.floor(toParam);
+
+    if (to - from > MAX_STATEMENT_RANGE_SECONDS) {
+      throw new InvalidStatementRangeError(
+        `Statement range cannot exceed ${MAX_STATEMENT_RANGE_SECONDS / (24 * 60 * 60)} days.`,
+      );
+    }
+
+    return { from, to };
   }
 
   return { from: now - 30 * 24 * 60 * 60, to: now };

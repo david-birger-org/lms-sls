@@ -1,16 +1,12 @@
 import { getErrorMessage } from "../../src/lib/errors.js";
 import { requireTrustedInternalUser } from "../../src/lib/internal-auth-user.js";
+import { createStoredMonobankInvoice } from "../../src/lib/invoice-creation.js";
 import {
   createPendingInvoice,
   ensureAppUser,
   markInvoiceCreationFailed,
-  storeCreatedInvoice,
 } from "../../src/lib/invoice-store.js";
-import {
-  createInvoice,
-  type MonobankInvoiceResponse,
-  type SupportedCurrency,
-} from "../../src/lib/monobank.js";
+import { type SupportedCurrency } from "../../src/lib/monobank.js";
 import {
   selectProductBySlug,
   toProductRecord,
@@ -27,14 +23,6 @@ interface CheckoutRequestBody {
 
 function badRequest(message: string) {
   return json({ error: message }, { status: 400 });
-}
-
-function getWebhookUrl(request: Request) {
-  return new URL("/api/monobank/webhook", request.url).toString();
-}
-
-function expirationTimestamp(validitySeconds: number) {
-  return new Date(Date.now() + validitySeconds * 1000).toISOString();
 }
 
 export async function POST(request: Request) {
@@ -101,58 +89,30 @@ export async function POST(request: Request) {
     });
     paymentId = pendingInvoice.paymentId;
 
-    let invoice: MonobankInvoiceResponse;
-    try {
-      invoice = await createInvoice({
-        amountMinor,
-        currency,
-        customerName,
-        description: product.nameEn,
-        redirectUrl: redirectUrl ?? undefined,
-        reference: pendingInvoice.reference,
-        validitySeconds: DEFAULT_INVOICE_VALIDITY_SECONDS,
-        webHookUrl: getWebhookUrl(request),
-      });
-    } catch (error) {
-      const message = getErrorMessage(error);
-      if (paymentId)
-        await markInvoiceCreationFailed({
-          errorMessage: message,
-          paymentId,
-          providerPayload: undefined,
-        }).catch(() => undefined);
-      return json({ error: message }, { status: 502 });
-    }
-
-    const invoiceId = invoice.invoiceId?.trim();
-    const pageUrl = invoice.pageUrl?.trim();
-
-    if (!invoiceId || !pageUrl) {
-      const message = "Monobank response did not include invoiceId or pageUrl.";
-      if (paymentId)
-        await markInvoiceCreationFailed({
-          errorMessage: message,
-          paymentId,
-          providerPayload: invoice,
-        }).catch(() => undefined);
-      return json({ error: message }, { status: 502 });
-    }
-
-    const expiresAt = expirationTimestamp(DEFAULT_INVOICE_VALIDITY_SECONDS);
-
-    await storeCreatedInvoice({
-      expiresAt,
-      invoiceId,
-      pageUrl,
-      paymentId: pendingInvoice.paymentId,
-      providerPayload: invoice,
+    const invoiceResult = await createStoredMonobankInvoice({
+      amountMinor,
+      currency,
+      customerName,
+      description: product.nameEn,
+      pendingInvoice,
+      redirectUrl: redirectUrl ?? undefined,
+      request,
+      validitySeconds: DEFAULT_INVOICE_VALIDITY_SECONDS,
     });
 
+    if (!invoiceResult.ok)
+      return json(
+        { error: invoiceResult.errorMessage },
+        { status: invoiceResult.status },
+      );
+
+    paymentId = null;
+
     return json({
-      expiresAt,
-      invoiceId,
-      pageUrl,
-      paymentId: pendingInvoice.paymentId,
+      expiresAt: invoiceResult.value.expiresAt,
+      invoiceId: invoiceResult.value.invoiceId,
+      pageUrl: invoiceResult.value.pageUrl,
+      paymentId: invoiceResult.value.paymentId,
     });
   } catch (error) {
     const message = getErrorMessage(error);

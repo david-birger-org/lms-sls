@@ -16,7 +16,16 @@ export interface UserPurchaseRow {
   product_image_url: string | null;
 }
 
-export async function selectUserPurchases(authUserId: string) {
+interface UserPurchasesQueryInput {
+  from: string;
+  limit: number;
+  to: string;
+}
+
+export async function selectUserPurchases(
+  authUserId: string,
+  { from, limit, to }: UserPurchasesQueryInput,
+) {
   const database = getDatabase();
 
   return database<UserPurchaseRow[]>`
@@ -38,11 +47,17 @@ export async function selectUserPurchases(authUserId: string) {
     inner join app_users au on au.id = p.user_id
     left join products pr on pr.id = p.product_id
     where au.auth_user_id = ${authUserId}
+      and p.created_at >= ${from}
+      and p.created_at <= ${to}
     order by p.created_at desc
+    limit ${limit}
   `;
 }
 
-export async function selectInvoicesCreatedByAdmin(authUserId: string) {
+export async function selectInvoicesCreatedByAdmin(
+  authUserId: string,
+  { from, limit, to }: UserPurchasesQueryInput,
+) {
   const database = getDatabase();
 
   return database<UserPurchaseRow[]>`
@@ -64,6 +79,9 @@ export async function selectInvoicesCreatedByAdmin(authUserId: string) {
     inner join app_users au on au.id = p.created_by_admin_user_id
     left join products pr on pr.id = p.product_id
     where au.auth_user_id = ${authUserId}
+      and p.created_at >= ${from}
+      and p.created_at <= ${to}
     order by p.created_at desc
+    limit ${limit}
   `;
 }
