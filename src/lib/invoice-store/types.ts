@@ -57,6 +57,7 @@ export interface EnsureAppUserInput {
 
 export interface CreatePendingInvoiceInput {
   amountMinor: number;
+  createdByAdminUserId?: string | null;
   currency: SupportedCurrency;
   customerEmail?: string | null;
   customerName: string;
@@ -64,7 +65,7 @@ export interface CreatePendingInvoiceInput {
   paymentId?: string;
   productId?: string | null;
   productSlug?: string | null;
-  userId: string;
+  userId: string | null;
 }
 
 export interface PendingInvoiceCreation {

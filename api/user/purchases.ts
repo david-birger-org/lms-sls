@@ -1,14 +1,21 @@
 import { getErrorMessage } from "../../src/lib/errors.js";
 import { requireTrustedInternalUser } from "../../src/lib/internal-auth-user.js";
 import { json } from "../../src/lib/response.js";
-import { selectUserPurchases } from "../../src/lib/user-purchases/queries.js";
+import {
+  selectInvoicesCreatedByAdmin,
+  selectUserPurchases,
+} from "../../src/lib/user-purchases/queries.js";
 
 export async function GET(request: Request) {
   const auth = await requireTrustedInternalUser(request);
   if (!auth.ok) return auth.response;
 
   try {
-    const rows = await selectUserPurchases(auth.user.userId);
+    const scope = new URL(request.url).searchParams.get("scope");
+    const rows =
+      scope === "created"
+        ? await selectInvoicesCreatedByAdmin(auth.user.userId)
+        : await selectUserPurchases(auth.user.userId);
 
     const purchases = rows.map((row) => ({
       id: row.id,

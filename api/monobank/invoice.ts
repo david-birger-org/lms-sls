@@ -227,20 +227,21 @@ export function createPostHandler({
         }
       }
 
-      const customerEmail = parsedInput.customerEmail ?? access.admin.email;
-      const userId = await ensureAppUserFn({
+      const customerEmail = parsedInput.customerEmail ?? null;
+      const createdByAdminUserId = await ensureAppUserFn({
         authUserId: access.admin.userId,
-        email: customerEmail,
-        fullName: parsedInput.customerName,
+        email: access.admin.email,
+        fullName: access.admin.name ?? access.admin.email ?? access.admin.userId,
       });
       const pendingInvoice = await createPendingInvoiceFn({
         amountMinor: parsedInput.amountMinor,
+        createdByAdminUserId,
         currency: parsedInput.currency,
         customerEmail,
         customerName: parsedInput.customerName,
         description: parsedInput.description,
         idempotencyKey: idempotencyKey ?? null,
-        userId,
+        userId: null,
       });
 
       paymentId = pendingInvoice.paymentId;

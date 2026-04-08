@@ -246,6 +246,7 @@ export async function createPendingInvoice(
 
   return insertPendingInvoiceRow({
     amountMinor: input.amountMinor,
+    createdByAdminUserId: input.createdByAdminUserId ?? null,
     currency: input.currency,
     customerEmail,
     customerName,
@@ -293,9 +294,17 @@ export async function listPendingInvoices(limit = 50) {
   return rows.map(toPendingInvoiceRecord);
 }
 
-export async function listPaymentHistory(days: number) {
-  const fromDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-  const rows = await selectPaymentHistoryRows(fromDate.toISOString());
+export async function listPaymentHistory({
+  from,
+  to,
+}: {
+  from: number;
+  to: number;
+}) {
+  const rows = await selectPaymentHistoryRows({
+    fromDateIso: new Date(from * 1000).toISOString(),
+    toDateIso: new Date(to * 1000).toISOString(),
+  });
 
   return rows.map(toPaymentHistoryRecord);
 }

@@ -68,12 +68,13 @@ describe("POST /api/monobank/invoice", () => {
     });
     expect(createPendingInvoiceFn).toHaveBeenCalledWith({
       amountMinor: 12500,
+      createdByAdminUserId: "app_user_1",
       currency: "USD",
       customerEmail: "person@example.com",
       customerName: "Ada Lovelace",
       description: "Expert matching",
       idempotencyKey: null,
-      userId: "app_user_1",
+      userId: null,
     });
     expect(createInvoiceFn).toHaveBeenCalledWith({
       amountMinor: 12500,

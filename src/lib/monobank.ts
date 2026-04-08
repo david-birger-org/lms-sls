@@ -147,12 +147,27 @@ export function getCurrencyCode(currency: SupportedCurrency) {
   return CURRENCY_CODE[currency];
 }
 
-export function getRangeDays(searchParams: URLSearchParams) {
-  const daysParam = Number(searchParams.get("days") ?? "30");
+export interface StatementRange {
+  from: number;
+  to: number;
+}
 
-  return Number.isFinite(daysParam)
-    ? Math.min(Math.max(daysParam, 1), 365)
-    : 30;
+export function getStatementRange(
+  searchParams: URLSearchParams,
+): StatementRange {
+  const now = Math.floor(Date.now() / 1000);
+  const fromParam = Number(searchParams.get("from"));
+  const toParam = Number(searchParams.get("to"));
+
+  if (
+    Number.isFinite(fromParam) &&
+    Number.isFinite(toParam) &&
+    fromParam < toParam
+  ) {
+    return { from: Math.floor(fromParam), to: Math.floor(toParam) };
+  }
+
+  return { from: now - 30 * 24 * 60 * 60, to: now };
 }
 
 export function getUnixTimestamp(date: Date) {
@@ -178,10 +193,8 @@ export async function fetchStatementChunk({
   return response.list ?? [];
 }
 
-export async function fetchStatement(days: number) {
+export async function fetchStatement({ from, to }: StatementRange) {
   const token = env.monobankToken;
-  const to = getUnixTimestamp(new Date());
-  const from = to - days * 24 * 60 * 60;
   const items: MonobankStatementItem[] = [];
 
   let chunkFrom = from;

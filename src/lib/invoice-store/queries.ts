@@ -81,6 +81,7 @@ export async function selectPaymentByIdempotencyKey(idempotencyKey: string) {
 
 export async function insertPendingInvoiceRow({
   amountMinor,
+  createdByAdminUserId,
   currency,
   customerEmail,
   customerName,
@@ -94,6 +95,7 @@ export async function insertPendingInvoiceRow({
   userId,
 }: {
   amountMinor: number;
+  createdByAdminUserId: string | null;
   currency: string;
   customerEmail: string | null;
   customerName: string;
@@ -104,13 +106,14 @@ export async function insertPendingInvoiceRow({
   productSlug: string | null;
   reference: string;
   status: PaymentStatus;
-  userId: string;
+  userId: string | null;
 }): Promise<PendingInvoiceCreation> {
   const database = getDatabase();
   const rows = await database<PendingInvoiceRow[]>`
     insert into payments (
       id,
       user_id,
+      created_by_admin_user_id,
       provider,
       reference,
       status,
@@ -126,6 +129,7 @@ export async function insertPendingInvoiceRow({
     values (
       ${paymentId},
       ${userId},
+      ${createdByAdminUserId},
       ${"monobank"},
       ${reference},
       ${status},
@@ -264,7 +268,13 @@ export async function selectPendingPaymentRows({
   `;
 }
 
-export async function selectPaymentHistoryRows(fromDateIso: string) {
+export async function selectPaymentHistoryRows({
+  fromDateIso,
+  toDateIso,
+}: {
+  fromDateIso: string;
+  toDateIso: string;
+}) {
   const database = getDatabase();
 
   return database<PaymentHistoryRow[]>`
@@ -289,6 +299,7 @@ export async function selectPaymentHistoryRows(fromDateIso: string) {
     where provider = ${"monobank"}
       and invoice_id is not null
       and coalesce(provider_modified_at, created_at) >= ${fromDateIso}
+      and coalesce(provider_modified_at, created_at) <= ${toDateIso}
     order by coalesce(provider_modified_at, created_at) desc, created_at desc
   `;
 }

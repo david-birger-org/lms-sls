@@ -1,8 +1,10 @@
 import { getErrorMessage } from "../../src/lib/errors.js";
 import { withTrustedInternalAdmin } from "../../src/lib/internal-auth.js";
-import { getPaymentDetailsByInvoiceId } from "../../src/lib/invoice-store.js";
-import { listPaymentHistory } from "../../src/lib/invoice-store.js";
-import { getRangeDays } from "../../src/lib/monobank.js";
+import {
+  getPaymentDetailsByInvoiceId,
+  listPaymentHistory,
+} from "../../src/lib/invoice-store.js";
+import { getStatementRange } from "../../src/lib/monobank.js";
 import { json } from "../../src/lib/response.js";
 
 export const GET = withTrustedInternalAdmin(async (request) => {
@@ -20,9 +22,9 @@ export const GET = withTrustedInternalAdmin(async (request) => {
       return json(payment);
     }
 
-    const safeDays = getRangeDays(requestUrl.searchParams);
+    const range = getStatementRange(requestUrl.searchParams);
 
-    return json({ list: await listPaymentHistory(safeDays) });
+    return json({ list: await listPaymentHistory(range) });
   } catch (error) {
     const message = getErrorMessage(error);
 
