@@ -135,6 +135,13 @@ create table if not exists public.payments (
   constraint payments_currency_check check (currency in ('UAH', 'USD'))
 );
 
+alter table public.app_users
+  drop constraint if exists app_users_auth_user_id_fkey;
+
+alter table public.app_users
+  add constraint app_users_auth_user_id_fkey
+  foreign key (auth_user_id) references public.auth_users(id) on delete cascade;
+
 create index if not exists idx_app_users_auth_user_id
   on public.app_users (auth_user_id);
 

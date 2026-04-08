@@ -49,7 +49,7 @@ export interface PendingInvoiceRow {
   reference: string;
 }
 
-export interface EnsureAppUserInput {
+export interface MirrorAuthUserInput {
   authUserId: string;
   email?: string | null;
   fullName: string;

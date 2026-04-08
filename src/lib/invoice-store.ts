@@ -1,5 +1,7 @@
 import {
   insertPendingInvoiceRow,
+  mirrorAuthUserToAppUsersRow,
+  selectAppUserIdByAuthUserId,
   selectLatestProviderStateRow,
   selectPaymentByIdempotencyKey,
   selectPaymentHistoryRowByInvoiceId,
@@ -9,11 +11,10 @@ import {
   updateInvoiceCancelledRow,
   updateInvoiceCreationFailedRow,
   updatePaymentProviderStateRow,
-  upsertAppUserRow,
 } from "./invoice-store/queries.js";
 import type {
   CreatePendingInvoiceInput,
-  EnsureAppUserInput,
+  MirrorAuthUserInput,
   MarkInvoiceCreationFailedInput,
   PaymentDetailsRecord,
   PaymentHistoryRecord,
@@ -37,7 +38,7 @@ import {
 
 export type {
   CreatePendingInvoiceInput,
-  EnsureAppUserInput,
+  MirrorAuthUserInput,
   MarkInvoiceCreationFailedInput,
   PaymentDetailsRecord,
   PaymentHistoryRecord,
@@ -218,15 +219,24 @@ function toPaymentDetailsRecord(row: PaymentHistoryRow): PaymentDetailsRecord {
   };
 }
 
-export async function ensureAppUser(input: EnsureAppUserInput) {
+export async function mirrorAuthUserToAppUsers(input: MirrorAuthUserInput) {
   const email = cleanNullableText(input.email);
   const fullName = cleanNullableText(input.fullName) ?? input.authUserId;
 
-  return upsertAppUserRow({
+  return mirrorAuthUserToAppUsersRow({
     authUserId: input.authUserId,
     email,
     fullName,
   });
+}
+
+export async function getAppUserIdByAuthUserId(authUserId: string) {
+  const appUserId = await selectAppUserIdByAuthUserId(authUserId);
+  if (!appUserId)
+    throw new Error(
+      `No app_users row for auth_user_id ${authUserId}. Better Auth hook should have created it.`,
+    );
+  return appUserId;
 }
 
 export async function findPaymentByIdempotencyKey(idempotencyKey: string) {

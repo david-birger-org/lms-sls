@@ -1,5 +1,5 @@
 import { env } from "../../../src/lib/env.js";
-import { ensureAppUser } from "../../../src/lib/invoice-store.js";
+import { mirrorAuthUserToAppUsers } from "../../../src/lib/invoice-store.js";
 import { json } from "../../../src/lib/response.js";
 
 interface UpsertAppUserPayload {
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     : email?.split("@")[0] || body.authUserId;
 
   try {
-    const appUserId = await ensureAppUser({
+    const appUserId = await mirrorAuthUserToAppUsers({
       authUserId: body.authUserId,
       email,
       fullName,

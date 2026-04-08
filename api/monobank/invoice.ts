@@ -3,8 +3,8 @@ import { requireTrustedInternalAdmin } from "../../src/lib/internal-auth.js";
 import { createStoredMonobankInvoice } from "../../src/lib/invoice-creation.js";
 import {
   createPendingInvoice,
-  ensureAppUser,
   findPaymentByIdempotencyKey,
+  getAppUserIdByAuthUserId,
   markInvoiceCreationFailed,
 } from "../../src/lib/invoice-store.js";
 import {
@@ -126,14 +126,14 @@ function buildInvoiceResponse({
 export function createPostHandler({
   createPendingInvoiceFn = createPendingInvoice,
   createStoredMonobankInvoiceFn = createStoredMonobankInvoice,
-  ensureAppUserFn = ensureAppUser,
+  getAppUserIdByAuthUserIdFn = getAppUserIdByAuthUserId,
   findPaymentByIdempotencyKeyFn = findPaymentByIdempotencyKey,
   markInvoiceCreationFailedFn = markInvoiceCreationFailed,
   requireTrustedInternalAdminFn = requireTrustedInternalAdmin,
 }: {
   createPendingInvoiceFn?: typeof createPendingInvoice;
   createStoredMonobankInvoiceFn?: typeof createStoredMonobankInvoice;
-  ensureAppUserFn?: typeof ensureAppUser;
+  getAppUserIdByAuthUserIdFn?: typeof getAppUserIdByAuthUserId;
   findPaymentByIdempotencyKeyFn?: typeof findPaymentByIdempotencyKey;
   markInvoiceCreationFailedFn?: typeof markInvoiceCreationFailed;
   requireTrustedInternalAdminFn?: typeof requireTrustedInternalAdmin;
@@ -178,12 +178,9 @@ export function createPostHandler({
       }
 
       const customerEmail = parsedInput.customerEmail ?? null;
-      const createdByAdminUserId = await ensureAppUserFn({
-        authUserId: access.admin.userId,
-        email: access.admin.email,
-        fullName:
-          access.admin.name ?? access.admin.email ?? access.admin.userId,
-      });
+      const createdByAdminUserId = await getAppUserIdByAuthUserIdFn(
+        access.admin.userId,
+      );
       const pendingInvoice = await createPendingInvoiceFn({
         amountMinor: parsedInput.amountMinor,
         createdByAdminUserId,

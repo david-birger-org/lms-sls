@@ -24,7 +24,20 @@ function toJsonbValue(value: unknown) {
   return value === undefined ? null : JSON.stringify(value);
 }
 
-export async function upsertAppUserRow({
+export async function selectAppUserIdByAuthUserId(authUserId: string) {
+  const database = getDatabase();
+  const rows = await database<{ id: string }[]>`
+    select id
+    from app_users
+    where auth_user_id = ${authUserId}
+      and deleted_at is null
+    limit 1
+  `;
+
+  return rows[0]?.id ?? null;
+}
+
+export async function mirrorAuthUserToAppUsersRow({
   authUserId,
   email,
   fullName,
@@ -49,8 +62,8 @@ export async function upsertAppUserRow({
     )
     on conflict (auth_user_id) do update
     set
-      email = coalesce(excluded.email, app_users.email),
-      full_name = coalesce(excluded.full_name, app_users.full_name),
+      email = excluded.email,
+      full_name = excluded.full_name,
       deleted_at = null,
       updated_at = timezone('utc', now())
     returning id

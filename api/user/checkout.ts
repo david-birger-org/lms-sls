@@ -3,7 +3,7 @@ import { requireTrustedInternalUser } from "../../src/lib/internal-auth-user.js"
 import { createStoredMonobankInvoice } from "../../src/lib/invoice-creation.js";
 import {
   createPendingInvoice,
-  ensureAppUser,
+  getAppUserIdByAuthUserId,
   markInvoiceCreationFailed,
 } from "../../src/lib/invoice-store.js";
 import { type SupportedCurrency } from "../../src/lib/monobank.js";
@@ -71,11 +71,7 @@ export async function POST(request: Request) {
   let paymentId: string | null = null;
 
   try {
-    const appUserId = await ensureAppUser({
-      authUserId: access.user.userId,
-      email: customerEmail,
-      fullName: customerName,
-    });
+    const appUserId = await getAppUserIdByAuthUserId(access.user.userId);
 
     const pendingInvoice = await createPendingInvoice({
       amountMinor,
