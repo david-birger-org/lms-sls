@@ -9,13 +9,6 @@ import { hasActiveFeature } from "../../src/lib/user-features/queries.js";
 
 const LECTURES_FEATURE = "lectures";
 
-async function fetchBlobContent(blobUrl: string) {
-  const response = await fetch(blobUrl);
-  if (!response.ok)
-    throw new Error(`Failed to fetch lecture content: ${response.status}`);
-  return response.text();
-}
-
 export async function GET(request: Request) {
   const auth = await requireTrustedInternalUser(request);
   if (!auth.ok) return auth.response;
@@ -42,15 +35,13 @@ export async function GET(request: Request) {
     const lecture = await selectLectureBySlug(slug);
     if (!lecture) return json({ error: "Lecture not found." }, { status: 404 });
 
-    const content = await fetchBlobContent(lecture.blob_path);
-
     return json({
       lecture: {
         slug: lecture.slug,
         title: lecture.title,
         description: lecture.description,
         coverImageUrl: lecture.cover_image_url,
-        content,
+        content: lecture.content,
       },
     });
   } catch (error) {

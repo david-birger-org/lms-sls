@@ -20,10 +20,10 @@ export async function selectLectureBySlug(slug: string) {
   const rows = await database<
     Pick<
       LectureRow,
-      "slug" | "title" | "description" | "blob_path" | "cover_image_url"
+      "slug" | "title" | "description" | "content" | "cover_image_url"
     >[]
   >`
-    select slug, title, description, blob_path, cover_image_url
+    select slug, title, description, content, cover_image_url
     from lectures
     where slug = ${slug}
       and active = true

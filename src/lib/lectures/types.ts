@@ -3,7 +3,7 @@ export interface LectureRow {
   slug: string;
   title: string;
   description: string | null;
-  blob_path: string;
+  content: string;
   cover_image_url: string | null;
   sort_order: number;
   active: boolean;
