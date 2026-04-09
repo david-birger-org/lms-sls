@@ -5,9 +5,13 @@ import {
   createPendingInvoice,
   findPaymentByIdempotencyKey,
   getAppUserIdByAuthUserId,
+  markInvoiceCancelled,
   markInvoiceCreationFailed,
+  syncMonobankPaymentStatus,
 } from "../../src/lib/invoice-store.js";
 import {
+  fetchInvoiceStatus,
+  removeInvoice,
   type SupportedCurrency,
   toMinorUnits,
 } from "../../src/lib/monobank.js";
@@ -239,3 +243,46 @@ export function createPostHandler({
 }
 
 export const POST = createPostHandler();
+
+interface RemoveInvoiceRequestBody {
+  invoiceId?: unknown;
+}
+
+function isExpiredInvoiceError(error: unknown) {
+  return /"errCode"\s*:\s*"INVOICE_EXPIRED"/i.test(getErrorMessage(error));
+}
+
+async function removeOrResolveExpiredInvoice(invoiceId: string) {
+  try {
+    const result = await removeInvoice(invoiceId);
+    await markInvoiceCancelled({ invoiceId, providerPayload: result });
+    return result;
+  } catch (error) {
+    if (!isExpiredInvoiceError(error)) throw error;
+    const invoiceStatus = await fetchInvoiceStatus(invoiceId);
+    await syncMonobankPaymentStatus(invoiceStatus);
+    return invoiceStatus;
+  }
+}
+
+export async function DELETE(request: Request) {
+  const access = await requireTrustedInternalAdmin(request);
+  if (!access.ok) return access.response;
+
+  try {
+    const body = (await request.json()) as RemoveInvoiceRequestBody;
+    const invoiceId =
+      typeof body.invoiceId === "string" ? body.invoiceId.trim() : "";
+
+    if (!invoiceId)
+      return json({ error: "invoiceId is required." }, { status: 400 });
+
+    const result = await removeOrResolveExpiredInvoice(invoiceId);
+    return json(result);
+  } catch (error) {
+    return json(
+      { error: `Failed to cancel invoice: ${getErrorMessage(error)}` },
+      { status: 500 },
+    );
+  }
+}
