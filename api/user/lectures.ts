@@ -1,5 +1,3 @@
-import { head } from "@vercel/blob";
-
 import { getErrorMessage } from "../../src/lib/errors.js";
 import { requireTrustedInternalUser } from "../../src/lib/internal-auth-user.js";
 import {
@@ -11,9 +9,8 @@ import { hasActiveFeature } from "../../src/lib/user-features/queries.js";
 
 const LECTURES_FEATURE = "lectures";
 
-async function fetchBlobContent(blobPath: string) {
-  const blobMeta = await head(blobPath);
-  const response = await fetch(blobMeta.url);
+async function fetchBlobContent(blobUrl: string) {
+  const response = await fetch(blobUrl);
   if (!response.ok)
     throw new Error(`Failed to fetch lecture content: ${response.status}`);
   return response.text();
