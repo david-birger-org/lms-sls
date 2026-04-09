@@ -3,6 +3,7 @@ import { withTrustedInternalAdmin } from "../../src/lib/internal-auth.js";
 import {
   getPaymentDetailsByInvoiceId,
   listPaymentHistory,
+  listRecentPaymentsByCustomerName,
 } from "../../src/lib/invoice-store.js";
 import {
   getStatementRange,
@@ -24,6 +25,13 @@ export const GET = withTrustedInternalAdmin(async (request) => {
 
       return json(payment);
     }
+
+    const customerName = requestUrl.searchParams.get("customerName")?.trim();
+
+    if (customerName)
+      return json({
+        list: await listRecentPaymentsByCustomerName(customerName),
+      });
 
     const range = getStatementRange(requestUrl.searchParams);
 
