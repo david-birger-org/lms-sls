@@ -1,6 +1,7 @@
 import { getErrorMessage } from "../../src/lib/errors.js";
 import { requireTrustedInternalUser } from "../../src/lib/internal-auth-user.js";
 import { json } from "../../src/lib/response.js";
+import { selectActiveFeatures } from "../../src/lib/user-features/queries.js";
 import {
   selectInvoicesCreatedByAdmin,
   selectUserPurchases,
@@ -88,7 +89,13 @@ export async function GET(request: Request) {
       productImageUrl: row.product_image_url,
     }));
 
-    return json({ purchases, range: { from, to } });
+    const featureRows = await selectActiveFeatures(auth.user.userId);
+    const features = featureRows.map((f) => ({
+      feature: f.feature,
+      grantedAt: f.granted_at,
+    }));
+
+    return json({ features, purchases, range: { from, to } });
   } catch (error) {
     return json(
       { error: `Failed to fetch purchases: ${getErrorMessage(error)}` },
