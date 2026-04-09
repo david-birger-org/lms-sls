@@ -4,15 +4,11 @@ import {
   selectActiveLectures,
   selectLectureBySlug,
 } from "../../src/lib/lectures/queries.js";
+import { applyWatermark } from "../../src/lib/lectures/watermark.js";
 import { json } from "../../src/lib/response.js";
 import { hasActiveFeature } from "../../src/lib/user-features/queries.js";
 
 const LECTURES_FEATURE = "lectures";
-
-function toBase64(buffer: Buffer | Uint8Array) {
-  if (Buffer.isBuffer(buffer)) return buffer.toString("base64");
-  return Buffer.from(buffer).toString("base64");
-}
 
 export async function GET(request: Request) {
   const auth = await requireTrustedInternalUser(request);
@@ -40,13 +36,15 @@ export async function GET(request: Request) {
     const lecture = await selectLectureBySlug(slug);
     if (!lecture) return json({ error: "Lecture not found." }, { status: 404 });
 
+    const watermarked = await applyWatermark(lecture.pdf_data);
+
     return json({
       lecture: {
         slug: lecture.slug,
         title: lecture.title,
         description: lecture.description,
         coverImageUrl: lecture.cover_image_url,
-        pdfBase64: toBase64(lecture.pdf_data),
+        pdfBase64: Buffer.from(watermarked).toString("base64"),
       },
     });
   } catch (error) {

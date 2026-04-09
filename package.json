@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "nodemailer": "^8.0.1"
+    "nodemailer": "^8.0.1",
+    "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.10",
