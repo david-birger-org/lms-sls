@@ -317,9 +317,7 @@ export async function selectPaymentHistoryRows({
   `;
 }
 
-export async function selectRecentPaymentsByCustomerName(
-  customerName: string,
-) {
+export async function selectRecentPaymentsByCustomerName(customerName: string) {
   const database = getDatabase();
 
   return database<PaymentHistoryRow[]>`
@@ -509,4 +507,38 @@ export async function updatePaymentProviderStateRow(
       updated_at = timezone('utc', now())
     where payments.reference = ${input.reference}
   `;
+}
+
+interface PaymentFeatureGrantRow {
+  id: string;
+  user_id: string;
+  product_slug: string | null;
+}
+
+export async function selectPaymentForFeatureGrant({
+  invoiceId,
+  reference,
+}: {
+  invoiceId: string | null;
+  reference: string | null;
+}) {
+  if (!invoiceId && !reference) return null;
+
+  const database = getDatabase();
+
+  const rows = invoiceId
+    ? await database<PaymentFeatureGrantRow[]>`
+        select id, user_id, product_slug
+        from payments
+        where invoice_id = ${invoiceId}
+        limit 1
+      `
+    : await database<PaymentFeatureGrantRow[]>`
+        select id, user_id, product_slug
+        from payments
+        where reference = ${reference}
+        limit 1
+      `;
+
+  return rows[0] ?? null;
 }

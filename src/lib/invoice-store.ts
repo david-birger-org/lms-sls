@@ -4,6 +4,7 @@ import {
   selectAppUserIdByAuthUserId,
   selectLatestProviderStateRow,
   selectPaymentByIdempotencyKey,
+  selectPaymentForFeatureGrant,
   selectPaymentHistoryRowByInvoiceId,
   selectPaymentHistoryRows,
   selectPendingPaymentRows,
@@ -394,6 +395,35 @@ export async function syncMonobankPaymentStatus(
     providerStatus,
     reference,
     status: normalizedStatus,
+  });
+
+  if (normalizedStatus === "paid")
+    await maybeGrantProductFeatures({ invoiceId, reference }).catch(() => {});
+}
+
+const LECTURE_PRODUCT_SLUG_PREFIX = "lecture";
+
+async function maybeGrantProductFeatures({
+  invoiceId,
+  reference,
+}: {
+  invoiceId: string | null;
+  reference: string | null;
+}) {
+  const payment = await selectPaymentForFeatureGrant({
+    invoiceId,
+    reference,
+  });
+  if (!payment?.product_slug?.startsWith(LECTURE_PRODUCT_SLUG_PREFIX)) return;
+
+  const { grantUserFeatureByAppUserId } = await import(
+    "./user-features/queries.js"
+  );
+
+  await grantUserFeatureByAppUserId({
+    appUserId: payment.user_id,
+    feature: "lectures",
+    paymentId: payment.id,
   });
 }
 
