@@ -28,9 +28,10 @@ function buildProductCaseUpdate(
   column: string,
   enabled: boolean,
   value: unknown,
+  startIndex: number,
 ) {
   return {
-    sql: `${column} = case when ? then ? else ${column} end`,
+    sql: `${column} = case when $${startIndex}::boolean then $${startIndex + 1} else ${column} end`,
     values: [enabled, enabled ? value : null],
   };
 }
@@ -78,7 +79,7 @@ export async function insertProduct(input: CreateProductInput) {
         pricing_type, price_uah_minor, price_usd_minor,
         image_url, active, sort_order
       )
-      values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       returning ${PRODUCT_COLUMNS}
     `,
     [
@@ -109,49 +110,60 @@ export async function updateProductById(id: string, input: UpdateProductInput) {
   const hasUah = "priceUahMinor" in input;
   const hasUsd = "priceUsdMinor" in input;
 
+  // $1 = slug, $2 = name_uk, $3 = name_en
   const descriptionUkUpdate = buildProductCaseUpdate(
     "description_uk",
     hasDescUk,
     input.descriptionUk ?? null,
+    4,
   );
+  // $4, $5
   const descriptionEnUpdate = buildProductCaseUpdate(
     "description_en",
     hasDescEn,
     input.descriptionEn ?? null,
+    6,
   );
+  // $6, $7  |  $8 = pricing_type
   const priceUahUpdate = buildProductCaseUpdate(
     "price_uah_minor",
     hasUah,
     input.priceUahMinor ?? null,
+    9,
   );
+  // $9, $10
   const priceUsdUpdate = buildProductCaseUpdate(
     "price_usd_minor",
     hasUsd,
     input.priceUsdMinor ?? null,
+    11,
   );
+  // $11, $12
   const imageUpdate = buildProductCaseUpdate(
     "image_url",
     hasImage,
     input.imageUrl ?? null,
+    13,
   );
+  // $13, $14  |  $15 = active, $16 = sort_order, $17 = id
 
   const rows = await database.unsafe<ProductRow[]>(
     `
       update products
       set
-        slug = coalesce(?, slug),
-        name_uk = coalesce(?, name_uk),
-        name_en = coalesce(?, name_en),
+        slug = coalesce($1, slug),
+        name_uk = coalesce($2, name_uk),
+        name_en = coalesce($3, name_en),
         ${descriptionUkUpdate.sql},
         ${descriptionEnUpdate.sql},
-        pricing_type = coalesce(?, pricing_type),
+        pricing_type = coalesce($8, pricing_type),
         ${priceUahUpdate.sql},
         ${priceUsdUpdate.sql},
         ${imageUpdate.sql},
-        active = coalesce(?, active),
-        sort_order = coalesce(?, sort_order),
+        active = coalesce($15, active),
+        sort_order = coalesce($16, sort_order),
         updated_at = timezone('utc', now())
-      where id = ?
+      where id = $17
       returning ${PRODUCT_COLUMNS}
     `,
     [
