@@ -317,6 +317,38 @@ export async function selectPaymentHistoryRows({
   `;
 }
 
+export async function selectRecentPaymentsByCustomerName(
+  customerName: string,
+) {
+  const database = getDatabase();
+
+  return database<PaymentHistoryRow[]>`
+    select
+      amount_minor,
+      created_at,
+      currency,
+      customer_name,
+      description,
+      expires_at,
+      failure_reason,
+      profit_amount_minor,
+      invoice_id,
+      page_url,
+      payment_info,
+      product_slug,
+      provider_modified_at,
+      provider_status,
+      reference,
+      status
+    from payments
+    where provider = ${"monobank"}
+      and invoice_id is not null
+      and lower(customer_name) = lower(${customerName})
+      and created_at >= now() - interval '30 days'
+    order by created_at desc
+  `;
+}
+
 export async function selectPaymentHistoryRowByInvoiceId(invoiceId: string) {
   const database = getDatabase();
   const rows = await database<PaymentHistoryRow[]>`

@@ -7,6 +7,7 @@ import {
   selectPaymentHistoryRowByInvoiceId,
   selectPaymentHistoryRows,
   selectPendingPaymentRows,
+  selectRecentPaymentsByCustomerName,
   updateCreatedInvoiceRow,
   updateInvoiceCancelledRow,
   updateInvoiceCreationFailedRow,
@@ -394,4 +395,9 @@ export async function syncMonobankPaymentStatus(
     reference,
     status: normalizedStatus,
   });
+}
+
+export async function listRecentPaymentsByCustomerName(customerName: string) {
+  const rows = await selectRecentPaymentsByCustomerName(customerName);
+  return rows.map(toPaymentHistoryRecord);
 }
