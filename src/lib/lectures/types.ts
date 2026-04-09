@@ -3,7 +3,7 @@ export interface LectureRow {
   slug: string;
   title: string;
   description: string | null;
-  content: string;
+  pdf_data: Buffer;
   cover_image_url: string | null;
   sort_order: number;
   active: boolean;
@@ -19,5 +19,5 @@ export interface LectureSummary {
 }
 
 export interface LectureDetail extends LectureSummary {
-  content: string;
+  pdfBase64: string;
 }

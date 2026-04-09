@@ -18,7 +18,7 @@ create table if not exists public.lectures (
   slug text unique not null,
   title text not null,
   description text,
-  content text not null,
+  pdf_data bytea not null,
   cover_image_url text,
   sort_order int not null default 0,
   active boolean not null default true,

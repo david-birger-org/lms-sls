@@ -9,6 +9,11 @@ import { hasActiveFeature } from "../../src/lib/user-features/queries.js";
 
 const LECTURES_FEATURE = "lectures";
 
+function toBase64(buffer: Buffer | Uint8Array) {
+  if (Buffer.isBuffer(buffer)) return buffer.toString("base64");
+  return Buffer.from(buffer).toString("base64");
+}
+
 export async function GET(request: Request) {
   const auth = await requireTrustedInternalUser(request);
   if (!auth.ok) return auth.response;
@@ -41,7 +46,7 @@ export async function GET(request: Request) {
         title: lecture.title,
         description: lecture.description,
         coverImageUrl: lecture.cover_image_url,
-        content: lecture.content,
+        pdfBase64: toBase64(lecture.pdf_data),
       },
     });
   } catch (error) {
